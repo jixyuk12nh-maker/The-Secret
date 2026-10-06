@@ -9472,7 +9472,8 @@ local frame = Instance.new("Frame")
 frame.ClipsDescendants = true
 frame.AnchorPoint = Vector2.new(v86[63], 0.5)
 frame.Position = UDim2.new(v86[63], -v86[63], 0.5, 0)
-frame.Size = UDim2.fromOffset(0, controlHeight)
+-- Keep the input box physically clickable even while it is empty.
+frame.Size = UDim2.fromOffset(math.min(arg.MaxWidth + 12, 240), controlHeight)
 frame.BorderSizePixel = 0
 arg2.Batch:Bind(frame, v86[5], v86[168])
 frame.Parent = parent
@@ -9496,10 +9497,14 @@ instance.AnchorPoint = Vector2.new(0, 0.5)
 instance.BorderSizePixel = 0
 instance.BackgroundTransparency = v86[63]
 instance.Position = UDim2.new(0, 5, v86[101], 0)
-instance.AutomaticSize = Enum.AutomaticSize.XY
+-- Config/text inputs need a stable hit area on desktop and mobile.
+instance.AutomaticSize = Enum.AutomaticSize.None
+instance.Size = UDim2.new(1, -10, 1, 0)
 instance.TextSize = v86[13]
-instance.Selectable = v86[153]
-instance.Active = v86[34]
+instance.Selectable = true
+instance.Active = true
+instance.Interactable = true
+instance.TextEditable = true
 arg2.Batch:Bind(instance, "TextColor3", "TextColor")
 instance.Parent = frame
 local uiPadding = Instance.new("UIPadding")
@@ -16302,8 +16307,8 @@ local floor2 = math.floor
 return UDim2.fromOffset(math.floor(n), floor2(n33))
 end
 
-local n = math.clamp(v117.X * 0.8, v118, designSize.X.Offset)
-local n33 = math.clamp(v117.Y * 0.7, v119, designSize.Y.Offset)
+local n = math.clamp(v117.X * 0.45, v118, designSize.X.Offset)
+local n33 = math.clamp(v117.Y * 0.92, v119, designSize.Y.Offset)
 local floor2 = math.floor
 return UDim2.fromOffset(math.floor(n), floor2(n33))
 end,
@@ -17573,16 +17578,21 @@ v126:SetOptions(fn39())
 end
 
 v125:Connect(v125.Clicked, function()
-local str7 = v124.Value:gsub("%s+", "")
-if str7 == "" then
+local str7 = tostring(v124.Value or ""):gsub("^%s+", ""):gsub("%s+$", "")
+if str7 == "" or str7:find("[/\\]") then
 return
 end
 
-if fn37(persistence:CreateDefault(str7), "Creating config") then
+-- Create a config from the LIVE/current feature state.
+-- ReactiveStore:SaveToFile() first serializes the current state, then writes it.
+local result = persistence:SaveToFile(str7, true)
+if fn37(result, "Creating config") then
 return
 end
+
+-- Keep the new config connected to the config list/selection immediately.
 fn40()
-v126:Set(str7)
+v126:Set(str7, true)
 end)
 
 local v127 = v120:AddButton({ Label = "Refresh List" })
@@ -42183,6 +42193,38 @@ return v116.VoidOk
 end
 
 index2.LoadCoreConfig = function(arg)
+-- Auto-create the cosmetics config storage and default core_config on first run.
+-- Existing files are never overwritten.
+local storageRoot = "kiciarebuild"
+local storageRivals = "kiciarebuild/rivals"
+local storageCosmetics = "kiciarebuild/rivals/cosmetics"
+local isfolder_ = K.fn("isfolder")
+local makefolder_ = K.fn("makefolder")
+
+if isfolder_ and makefolder_ then
+    pcall(function()
+        if not isfolder_(storageRoot) then
+            makefolder_(storageRoot)
+        end
+        if not isfolder_(storageRivals) then
+            makefolder_(storageRivals)
+        end
+        if not isfolder_(storageCosmetics) then
+            makefolder_(storageCosmetics)
+        end
+    end)
+end
+
+local corePath = storageCosmetics .. "/core_config.json"
+if not isfile(corePath) then
+    local created = arg._configManager:SaveDefaultToFile("core_config", true)
+    if not created.Ok then
+        arg:_RestoreSessionState()
+        arg:_ConnectAutoSave()
+        return v116.err("CosmeticsConfig", "LoadCoreConfig", string.format("Failed to create default core config: %s", tostring(created.Error.Detail)))
+    end
+end
+
 local coreConfig = arg._configManager:LoadFromFile("core_config")
 
 if not coreConfig.Ok then
