@@ -2075,7 +2075,7 @@ end
 end
 do -- u
 local function fn35()local I= tbl17 .t()
-local l,W,N=I.GuiService,I.UserInputService,{DesignSize=UDim2.fromOffset(800,1000),MinSize=UDim2.fromOffset(560,400),Scale=1}
+local l,W,N=I.GuiService,I.UserInputService,{DesignSize=UDim2.fromOffset(1000,800),MinSize=UDim2.fromOffset(560,400),Scale=1}
 local function I()return workspace.CurrentCamera
 end
 local function P(a)if not a then return false
@@ -17151,7 +17151,7 @@ resolveDefaultSize = function()
 local v117 = v116.currentViewportSize()
 local designSize = v115.DesignSize
 local v118, v119 = tbl18.effectiveMinSize(v117)
-local ratio = 5 / 4
+local ratio = 4 / 5
 local maxWidth
 local maxHeight
 
