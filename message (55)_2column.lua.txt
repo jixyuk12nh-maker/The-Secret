@@ -17578,17 +17578,21 @@ v126:SetOptions(fn39())
 end
 
 v125:Connect(v125.Clicked, function()
-local str7 = v124.Value:gsub("^%s+", ""):gsub("%s+$", "")
+local str7 = tostring(v124.Value or ""):gsub("^%s+", ""):gsub("%s+$", "")
 if str7 == "" or str7:find("[/\\]") then
 return
 end
 
--- Create the config from the CURRENT state, not the default state.
-if fn37(persistence:SaveToFile(str7, true), "Creating config") then
+-- Create a config from the LIVE/current feature state.
+-- ReactiveStore:SaveToFile() first serializes the current state, then writes it.
+local result = persistence:SaveToFile(str7, true)
+if fn37(result, "Creating config") then
 return
 end
+
+-- Keep the new config connected to the config list/selection immediately.
 fn40()
-v126:Set(str7)
+v126:Set(str7, true)
 end)
 
 local v127 = v120:AddButton({ Label = "Refresh List" })
