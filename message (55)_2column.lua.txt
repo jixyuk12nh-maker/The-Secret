@@ -16307,8 +16307,8 @@ local floor2 = math.floor
 return UDim2.fromOffset(math.floor(n), floor2(n33))
 end
 
-local n = math.clamp(v117.X * 0.8, v118, designSize.X.Offset)
-local n33 = math.clamp(v117.Y * 0.7, v119, designSize.Y.Offset)
+local n = math.clamp(v117.X * 0.45, v118, designSize.X.Offset)
+local n33 = math.clamp(v117.Y * 0.92, v119, designSize.Y.Offset)
 local floor2 = math.floor
 return UDim2.fromOffset(math.floor(n), floor2(n33))
 end,
