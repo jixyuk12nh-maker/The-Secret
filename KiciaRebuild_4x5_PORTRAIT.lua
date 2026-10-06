@@ -17151,7 +17151,7 @@ resolveDefaultSize = function()
 local v117 = v116.currentViewportSize()
 local designSize = v115.DesignSize
 local v118, v119 = tbl18.effectiveMinSize(v117)
-local ratio = 4 / 5
+local ratio = 5 / 4
 local maxWidth
 local maxHeight
 
@@ -17192,7 +17192,9 @@ end
 
 local n33 = math.floor(v117.X * n)
 local n34 = math.floor(v117.Y * n)
-return math.clamp(arg, v118, math.max(v118, n33)), math.clamp(arg2, v119, math.max(v119, n34))
+local minWidth = math.min(v118, n33)
+local minHeight = math.min(v119, n34)
+return math.clamp(arg, minWidth, n33), math.clamp(arg2, minHeight, n34)
 end
 
 while true do
