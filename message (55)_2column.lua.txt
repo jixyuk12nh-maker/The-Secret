@@ -3910,7 +3910,8 @@ instance.TextTruncate = Enum.TextTruncate.AtEnd
 if inline then
 instance.LayoutOrder = -1
 instance.FontFace = menu.Fonts.Main
-instance.AutomaticSize = Enum.AutomaticSize.XY
+instance.AutomaticSize = Enum.AutomaticSize.None
+instance.Size = UDim2.new(1, -10, 1, 0)
 else
 instance.ClipsDescendants = true
 instance.FontFace = v116.Medium
@@ -7662,7 +7663,8 @@ instance.Size = UDim2.fromScale(1, 0)
 instance.ClipsDescendants = true
 instance.TextXAlignment = Enum.TextXAlignment.Left
 instance.BorderSizePixel = 0
-instance.AutomaticSize = Enum.AutomaticSize.XY
+instance.AutomaticSize = Enum.AutomaticSize.None
+instance.Size = UDim2.new(1, -10, 1, 0)
 instance.TextSize = 16
 instance.FontFace = arg._menu.Fonts.Main
 instance.LayoutOrder = layoutOrder
@@ -9472,7 +9474,8 @@ local frame = Instance.new("Frame")
 frame.ClipsDescendants = true
 frame.AnchorPoint = Vector2.new(v86[63], 0.5)
 frame.Position = UDim2.new(v86[63], -v86[63], 0.5, 0)
-frame.Size = UDim2.fromOffset(0, controlHeight)
+-- Always give text inputs a real clickable area, including empty Config Name.
+frame.Size = UDim2.fromOffset(math.min(arg.MaxWidth + 12, 240), controlHeight)
 frame.BorderSizePixel = 0
 arg2.Batch:Bind(frame, v86[5], v86[168])
 frame.Parent = parent
@@ -9496,7 +9499,8 @@ instance.AnchorPoint = Vector2.new(0, 0.5)
 instance.BorderSizePixel = 0
 instance.BackgroundTransparency = v86[63]
 instance.Position = UDim2.new(0, 5, v86[101], 0)
-instance.AutomaticSize = Enum.AutomaticSize.XY
+instance.AutomaticSize = Enum.AutomaticSize.None
+instance.Size = UDim2.new(1, -10, 1, 0)
 instance.TextSize = v86[13]
 -- TextBox input must remain interactive on both desktop and mobile.
 -- Do not inherit the menu's generic Selectable/Active flags here because
@@ -9506,15 +9510,6 @@ instance.Active = true
 instance.Interactable = true
 instance.TextEditable = true
 instance.ClearTextOnFocus = false
-instance.TouchTap:Connect(function()
-    if not instance:IsFocused() then
-        task.defer(function()
-            if instance.Parent ~= nil then
-                instance:CaptureFocus()
-            end
-        end)
-    end
-end)
 instance.Focused:Connect(function()
     instance.Interactable = true
     instance.TextEditable = true
