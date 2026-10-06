@@ -2075,7 +2075,7 @@ end
 end
 do -- u
 local function fn35()local I= tbl17 .t()
-local l,W,N=I.GuiService,I.UserInputService,{DesignSize=UDim2.fromOffset(720,900),MinSize=UDim2.fromOffset(280,350),Scale=1}
+local l,W,N=I.GuiService,I.UserInputService,{DesignSize=UDim2.fromOffset(820,1025),MinSize=UDim2.fromOffset(360,450),Scale=1}
 local function I()return workspace.CurrentCamera
 end
 local function P(a)if not a then return false
@@ -17163,42 +17163,15 @@ maxWidth = v117.X * 0.8
 maxHeight = v117.Y * 0.7
 end
 
-local width = math.min(designSize.X.Offset, maxWidth, maxHeight / ratio)
-width = math.max(v118, width)
-width = math.min(width, designSize.X.Offset)
-
-local height = width * ratio
-if height < v119 then
-height = v119
-width = height / ratio
-end
-
+local width = math.max(v118, designSize.X.Offset)
+local height = math.max(v119, width * ratio)
 local floor2 = math.floor
 width = math.max(1, floor2(width))
-height = math.max(1, floor2(width * 1.25))
-
+height = math.max(1, floor2(width * ratio))
 return UDim2.fromOffset(width, height)
 end,
 clampSizeToViewport = function(arg, arg2)
-local v117 = v116.currentViewportSize()
-local v118, v119 = tbl18.effectiveMinSize(v117)
-
-if not (n25 < 3847) then
-local n = 0.98
-
-if v115.IsMobile() then
-n = 0.75
-end
-
-local n33 = math.floor(v117.X * n)
-local n34 = math.floor(v117.Y * n)
-local minWidth = math.min(v118, n33)
-local minHeight = math.min(v119, n34)
-return math.clamp(arg, minWidth, n33), math.clamp(arg2, minHeight, n34)
-end
-
-while true do
-end
+return math.max(1, math.floor(arg)), math.max(1, math.floor(arg2))
 end,
 menuBounds = function(arg)
 local parent = arg.Parent
@@ -17213,10 +17186,7 @@ end
 return v116.currentViewportSize()
 end,
 clampPositionToParent = function(arg, arg2, arg3, arg4, arg5)
-local v117 = tbl18.menuBounds(arg)
-local n = math.max(0, math.floor(v117.X - arg4))
-local n33 = math.max(0, math.floor(v117.Y - arg5))
-return math.round(math.clamp(arg2, 0, n)), math.round(math.clamp(arg3, v86[186], n33))
+return math.round(arg2), math.round(arg3)
 end,
 centeredInParent = function(arg, arg2, arg3)
 local v117 = tbl18.menuBounds(arg)
@@ -17426,8 +17396,8 @@ local size2 = stateData and stateData.Size
 if type(size2) == "table" and #size2 >= 2 then
 local savedWidth = tonumber(size2[1]) or 0
 local savedHeight = savedWidth * 1.25
-local v127, v128 = v123.clampSizeToViewport(savedWidth, savedHeight)
-local adjustedWidth = math.min(v127, math.floor(v128 / 1.25))
+local v127, v128 = math.max(1, math.floor(savedWidth)), math.max(1, math.floor(savedHeight))
+local adjustedWidth = v127
 local adjustedHeight = math.floor(adjustedWidth * 1.25)
 if adjustedWidth > 0 and adjustedHeight > 0 then
 v127, v128 = adjustedWidth, adjustedHeight
