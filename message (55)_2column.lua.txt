@@ -9498,8 +9498,30 @@ instance.BackgroundTransparency = v86[63]
 instance.Position = UDim2.new(0, 5, v86[101], 0)
 instance.AutomaticSize = Enum.AutomaticSize.XY
 instance.TextSize = v86[13]
-instance.Selectable = v86[153]
-instance.Active = v86[34]
+-- TextBox input must remain interactive on both desktop and mobile.
+-- Do not inherit the menu's generic Selectable/Active flags here because
+-- those flags can disable touch/keyboard focus for Config-backed fields.
+instance.Selectable = true
+instance.Active = true
+instance.TextEditable = true
+instance.TouchTap:Connect(function()
+    if not instance:IsFocused() then
+        task.defer(function()
+            if instance.Parent ~= nil then
+                instance:CaptureFocus()
+            end
+        end)
+    end
+end)
+instance.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        task.defer(function()
+            if instance.Parent ~= nil then
+                instance:CaptureFocus()
+            end
+        end)
+    end
+end)
 arg2.Batch:Bind(instance, "TextColor3", "TextColor")
 instance.Parent = frame
 local uiPadding = Instance.new("UIPadding")
