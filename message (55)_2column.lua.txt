@@ -1490,7 +1490,9 @@ return arg._configManager:SaveToFile(arg2, arg3)
 end
 
 index2.CreateDefault = function(arg, arg2)
-return arg._configManager:SaveDefaultToFile(arg2, v86[34])
+-- A newly created config must capture the CURRENT settings, not the defaults.
+-- SaveToFile serializes arg:_PersistableData() through the live store.
+return arg:SaveToFile(arg2, v86[34])
 end
 
 local fn36 = nil
@@ -17671,6 +17673,7 @@ arg:SaveState()
 end
 
 fn40()
+v126:Set(nil, true)
 end)
 
 local function fn41()
