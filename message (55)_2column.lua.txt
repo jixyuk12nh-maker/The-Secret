@@ -9474,7 +9474,7 @@ local frame = Instance.new("Frame")
 frame.ClipsDescendants = true
 frame.AnchorPoint = Vector2.new(v86[63], 0.5)
 frame.Position = UDim2.new(v86[63], -v86[63], 0.5, 0)
-frame.Size = UDim2.fromOffset(0, controlHeight)
+frame.Size = UDim2.fromOffset(math.min(arg.MaxWidth + 12, 240), controlHeight)
 frame.BorderSizePixel = 0
 arg2.Batch:Bind(frame, v86[5], v86[168])
 frame.Parent = parent
@@ -9498,12 +9498,28 @@ instance.AnchorPoint = Vector2.new(0, 0.5)
 instance.BorderSizePixel = 0
 instance.BackgroundTransparency = v86[63]
 instance.Position = UDim2.new(0, 5, v86[101], 0)
-instance.AutomaticSize = Enum.AutomaticSize.XY
+instance.AutomaticSize = Enum.AutomaticSize.None
+instance.Size = UDim2.new(1, -10, 1, 0)
 instance.TextSize = v86[13]
-instance.Selectable = v86[153]
-instance.Active = v86[34]
+instance.Selectable = true
+instance.Active = true
+instance.Interactable = true
+instance.TextEditable = true
 arg2.Batch:Bind(instance, "TextColor3", "TextColor")
 instance.Parent = frame
+instance.Focused:Connect(function()
+instance.Interactable = true
+instance.TextEditable = true
+end)
+instance.InputBegan:Connect(function(input)
+if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+task.defer(function()
+if instance.Parent ~= nil then
+instance:CaptureFocus()
+end
+end)
+end
+end)
 local uiPadding = Instance.new("UIPadding")
 uiPadding.PaddingRight = UDim.new(0, v86[175])
 uiPadding.PaddingLeft = UDim.new(0, 1)
@@ -17575,12 +17591,13 @@ v126:SetOptions(fn39())
 end
 
 v125:Connect(v125.Clicked, function()
-local str7 = v124.Value:gsub("%s+", "")
-if str7 == "" then
+local str7 = v124.Value:gsub("^%s+", ""):gsub("%s+$", "")
+if str7 == "" or str7:find("[/\\]") then
 return
 end
 
-if fn37(persistence:CreateDefault(str7), "Creating config") then
+-- Create the config from the CURRENT state, not the default state.
+if fn37(persistence:SaveToFile(str7, true), "Creating config") then
 return
 end
 fn40()
