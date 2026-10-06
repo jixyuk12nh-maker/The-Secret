@@ -9503,7 +9503,9 @@ instance.TextSize = v86[13]
 -- those flags can disable touch/keyboard focus for Config-backed fields.
 instance.Selectable = true
 instance.Active = true
+instance.Interactable = true
 instance.TextEditable = true
+instance.ClearTextOnFocus = false
 instance.TouchTap:Connect(function()
     if not instance:IsFocused() then
         task.defer(function()
@@ -9512,6 +9514,10 @@ instance.TouchTap:Connect(function()
             end
         end)
     end
+end)
+instance.Focused:Connect(function()
+    instance.Interactable = true
+    instance.TextEditable = true
 end)
 instance.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
