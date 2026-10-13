@@ -254,30 +254,30 @@ local Library = {
     OriginalMinSize = Vector2.new(480, 360),
     MinSize = Vector2.new(480, 360),
     DPIScale = 1,
-    CornerRadius = 4,
+    CornerRadius = 7,
 
     IsLightTheme = false,
     Scheme = {
-        BackgroundColor = Color3.fromRGB(8, 7, 10),
-        MainColor = Color3.fromRGB(20, 16, 19),
-        AccentColor = Color3.fromRGB(255, 111, 0),
-        OutlineColor = Color3.fromRGB(105, 57, 31),
-        FontColor = Color3.fromRGB(255, 241, 224),
-        Font = Font.fromEnum(Enum.Font.Gotham),
+        BackgroundColor = Color3.fromRGB(7, 7, 10),
+        MainColor = Color3.fromRGB(18, 15, 16),
+        AccentColor = Color3.fromRGB(255, 112, 0),
+        OutlineColor = Color3.fromRGB(105, 53, 22),
+        FontColor = Color3.fromRGB(255, 240, 224),
+        Font = Font.fromEnum(Enum.Font.GothamMedium),
 
-        RedColor = Color3.fromRGB(255, 64, 64),
-        DestructiveColor = Color3.fromRGB(190, 35, 35),
-        DarkColor = Color3.fromRGB(4, 4, 5),
-        WhiteColor = Color3.fromRGB(255, 248, 239),
+        RedColor = Color3.fromRGB(255, 50, 50),
+        DestructiveColor = Color3.fromRGB(220, 38, 38),
+        DarkColor = Color3.fromRGB(3, 3, 5),
+        WhiteColor = Color3.fromRGB(255, 248, 238),
 
         BackgroundImage = ""
     },
 
-    GlassTransparency = 0.38,
-    GlassBlurSize = 26,
-    GlassDimBrightness = -0.28,
-    GlassDimContrast = 0.14,
-    GlassDimSaturation = -0.22,
+    GlassTransparency = 0.34,
+    GlassBlurSize = 28,
+    GlassDimBrightness = -0.3,
+    GlassDimContrast = 0.16,
+    GlassDimSaturation = -0.28,
     WorldBlur = nil,
     WorldDim = nil,
 
@@ -290,7 +290,7 @@ local Library = {
 
     ImageManager = CustomImageManager,
 
-    Notify = nil, Toggle = nil
+    Notify = nil, Toggle = nil -- we love luau lsp
 }
 
 if RunService:IsStudio() then
@@ -311,7 +311,6 @@ else
 end
 
 local Templates = {
-
     Frame = {
         BorderSizePixel = 0,
     },
@@ -779,10 +778,10 @@ local function FuzzyScore(Text: string, Search: string): (boolean, number)
     end
 
     if SearchIdx <= SearchLen then
-        return false, 0
+        return false, 0 --// Not every Search character was found, in order
     end
 
-    Score -= (LastMatchIdx - SearchLen) * 0.05
+    Score -= (LastMatchIdx - SearchLen) * 0.05 --// Slightly favour tighter matches
     return true, Score
 end
 
@@ -909,7 +908,6 @@ local function CheckDepbox(Box, Search, ForceVisible: boolean?)
             ElementInfo.Holder.Visible = false
             continue
         elseif ElementInfo.SubButton then
-
             local Visible = false
 
             if MatchesSearch(ElementInfo, Search, ForceVisible) and ElementInfo.Visible then
@@ -1076,7 +1074,6 @@ local function ApplySearchToTab(Tab, Search)
                 ElementInfo.Holder.Visible = false
                 continue
             elseif ElementInfo.SubButton then
-
                 local Visible = false
                 if MatchesSearch(ElementInfo, Search, GroupboxMatches) and ElementInfo.Visible then
                     Visible = true
@@ -1146,7 +1143,6 @@ local function ApplySearchToTab(Tab, Search)
                     ElementInfo.Holder.Visible = false
                     continue
                 elseif ElementInfo.SubButton then
-
                     local Visible = false
                     if MatchesSearch(ElementInfo, Search, SubTabMatches) and ElementInfo.Visible then
                         Visible = true
@@ -2205,7 +2201,7 @@ local function GetSnapGuideOffset(Name: string, SnappedValue: number, ElemDimens
         return SnappedValue + ElemDimension / 2
     end
 
-    return SnappedValue
+    return SnappedValue -- LeftEdge / TopEdge
 end
 
 function Library:MakeDraggable(
@@ -2565,8 +2561,8 @@ function Library:PlayTabAnimation(Tab, Showing: boolean, OnComplete: (() -> ())?
         if SwipeFrom == "auto" and Library.PreviousTab then
             local CurrentOrder = Tab.Button.LayoutOrder
             local PreviousOrder = Library.PreviousTab.Button.LayoutOrder
-            if CurrentOrder and PreviousOrder then
-                StartPosition = CurrentOrder > PreviousOrder and StartingPositions.Top or StartingPositions.Bottom
+            if CurrentOrder and PreviousOrder then -- this may be unnecessary but oh well
+                StartPosition = CurrentOrder > PreviousOrder and StartingPositions.Top or StartingPositions.Bottom -- bigger order means its under the current button
             else
                 StartPosition = StartingPositions.Bottom
             end
@@ -2576,7 +2572,7 @@ function Library:PlayTabAnimation(Tab, Showing: boolean, OnComplete: (() -> ())?
             StartPosition = StartingPositions.Top
         elseif SwipeFrom == "right" then
             StartPosition = StartingPositions.Right
-        else
+        else -- bottom (Default)
             StartPosition = StartingPositions.Bottom
         end
 
@@ -3524,7 +3520,7 @@ function Library:AddContextMenu(
     List: number?,
     ActiveCallback: (Active: boolean) -> ()?,
     IgnoreCornerRadius: boolean?,
-    SpecificCornersOnly: ("top" | "bottom" | "no_left" | "no_top_left")?,
+    SpecificCornersOnly: ("top" | "bottom" | "no_left" | "no_top_left")?, -- stupid way of doing this
     AnimationType: ("Dropdown" | "KeyPicker" | "none")?
 )
     local Menu
@@ -4039,9 +4035,9 @@ do
             Connections = {},
 
             Text = Info.Text,
-            Value = Info.Default,
-            Modifiers = Info.DefaultModifiers,
-            DisplayValue = Info.Default,
+            Value = Info.Default, -- Key
+            Modifiers = Info.DefaultModifiers, -- Modifiers
+            DisplayValue = Info.Default, -- Picker Text
 
             Blacklisted = Info.Blacklisted,
             BlacklistedModifiers = Info.BlacklistedModifiers,
@@ -4439,7 +4435,7 @@ do
                 Checkbox.Visible = not Normal
             end
 
-            KeyPicker.DoClick = function(...) end
+            KeyPicker.DoClick = function(...) end --// make luau lsp shut up
             table.insert(KeyPicker.Connections, Holder.MouseButton1Click:Connect(function()
                 if KeybindsToggle.Normal then
                     return
@@ -5027,9 +5023,8 @@ do
                 end
 
                 if Released then
-                    break
+                    break -- Use modifier key as bind
                 elseif NextInput then
-
                     local OldModName = ModifiersInput[CurrentInput.KeyCode]
                     if OldModName and not table.find(ActiveModifiers, OldModName) then
                         ActiveModifiers[#ActiveModifiers + 1] = OldModName
@@ -5708,7 +5703,7 @@ do
                 Library.CopiedColor = { ColorPicker.Value, ColorPicker.Transparency }
             end)
 
-            ColorPicker.SetValueRGB = function(...) end
+            ColorPicker.SetValueRGB = function(...) end --// make luau lsp shut up
             CreateButton("Paste color", function()
                 if not Library.CopiedColor then
                     return
@@ -6570,7 +6565,7 @@ do
                         Library:SafeCallback(Button.Func)
                     end
 
-                    RunService.RenderStepped:Wait()
+                    RunService.RenderStepped:Wait() --// Mouse Button fires without waiting (i hate roblox)
                     Button.Locked = false
                     return
                 end
@@ -8439,7 +8434,6 @@ do
             end
 
             if IsSearching then
-
                 table.sort(Pending, function(A, B)
                     if A.MatchScore ~= B.MatchScore then
                         return A.MatchScore > B.MatchScore
@@ -11124,7 +11118,7 @@ function Library:CreateWindow(WindowInfo)
         local FooterGradient = Instance.new("UIGradient")
         FooterGradient.Color = ColorSequence.new({
             ColorSequenceKeypoint.new(0.00, Color3.fromRGB(255, 90, 190)),
-            ColorSequenceKeypoint.new(0.16, Color3.fromRGB(125, 85, 255)),
+            ColorSequenceKeypoint.new(0.16, Color3.fromRGB(255, 112, 0)),
             ColorSequenceKeypoint.new(0.33, Color3.fromRGB(0, 210, 255)),
             ColorSequenceKeypoint.new(0.50, Color3.fromRGB(80, 255, 190)),
             ColorSequenceKeypoint.new(0.66, Color3.fromRGB(255, 220, 80)),
@@ -13993,7 +13987,6 @@ function Library:CreateWindow(WindowInfo)
         end
 
         if Input.KeyCode == Enum.KeyCode.Escape then
-
             local FocusedBox = UserInputService:GetFocusedTextBox()
             if FocusedBox then
                 FocusedBox:ReleaseFocus()
@@ -14452,8 +14445,8 @@ function Library:CreateLoading(LoadingInfo)
         end
 
         local RequiredHeight =
-              49
-            + 48
+              49 -- TopBar
+            + 48 -- Padding
             + InnerContent.UIListLayout.AbsoluteContentSize.Y
 
         Loading.WindowHeight = math.max(Loading.BaseWindowHeight, RequiredHeight)
@@ -14565,15 +14558,15 @@ function Library:CreateLoading(LoadingInfo)
 
         local HasButtons = ErrorButtonsHolder.Visible
         local RequiredHeight =
-              49
-            + 15
-            + 18
-            + 6
-            + ErrorY
-            + 15
-            + (HasButtons and 48 or 0)
+              49                        -- TopBar
+            + 15                        -- Padding Top
+            + 18                        -- Title Height
+            + 6                         -- Padding between Title and Label
+            + ErrorY                    -- Label Height
+            + 15                        -- Padding between Label and Buttons
+            + (HasButtons and 48 or 0)  -- Buttons Area
 
-        Loading.WindowErrorHeight = RequiredHeight
+        Loading.WindowErrorHeight = RequiredHeight -- math.max(Loading.WindowHeight, RequiredHeight)
     end
 
     function Loading:SetErrorMessage(Text)
