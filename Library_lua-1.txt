@@ -3728,7 +3728,7 @@ local SilentTab = SilentBox:AddTab('silent aim');
 local AimbotTab = SilentBox:AddTab('aimbot');
 
 local SilentEnabled = SilentTab:AddToggle('SilentAimEnabled', { Text = 'enabled', Default = true });
-SilentEnabled:AddKeyPicker('SilentAimKey', { Mode = 'Toggle', Text = 'silent aim' });
+SilentEnabled:AddKeyPicker('SilentAimKey', { Default = 'None', Mode = 'Toggle', Text = 'silent aim' });
 SilentTab:AddToggle('SilentManipulation', { Text = 'manipulation', Default = false });
 SilentTab:AddToggle('SilentClosestPart', { Text = 'closest part', Default = true });
 SilentTab:AddToggle('SilentVisualize', { Text = 'visualize', Default = false });
@@ -3757,13 +3757,13 @@ Targeting:AddToggle('DisableOnFlash', { Text = 'disable on flash', Default = fal
 -- main / right: triggerbot + weapons
 local Trigger = TabMain:AddRightGroupbox('triggerbot');
 local TriggerEnabled = Trigger:AddToggle('TriggerEnabled', { Text = 'enabled', Default = true });
-TriggerEnabled:AddKeyPicker('TriggerKey', { Mode = 'Toggle', Text = 'triggerbot' });
+TriggerEnabled:AddKeyPicker('TriggerKey', { Default = 'None', Mode = 'Toggle', Text = 'triggerbot' });
 Trigger:AddSlider('TriggerReaction', { Text = 'reaction time', Default = 0, Min = 0, Max = 1000, Rounding = 0, Suffix = 'ms' });
 Trigger:AddSlider('TriggerReactionOffset', { Text = 'reaction time offset', Default = 0, Min = 0, Max = 1000, Rounding = 0, Suffix = 'ms' });
 Trigger:AddSlider('TriggerForget', { Text = 'forget time', Default = 0, Min = 0, Max = 10, Rounding = 0, Suffix = 's' });
 Trigger:AddSlider('TriggerShootDelay', { Text = 'shoot delay', Default = 0, Min = 0, Max = 1000, Rounding = 0, Suffix = 'ms' });
 Trigger:AddSlider('TriggerMaxDistance', { Text = 'max distance', Default = 500, Min = 0, Max = 1000, Rounding = 0, Suffix = 's' });
-Trigger:AddDropdown('TriggerBlacklist', { Text = 'part blacklist', Values = { 'head', 'torso', 'arms', 'legs' }, Multi = true });
+Trigger:AddDropdown('TriggerBlacklist', { Text = 'part blacklist', Values = { 'head', 'torso', 'arms', 'legs' }, Multi = true, AllowNull = true });
 Trigger:AddDropdown('TriggerSettings', { Text = 'settings', Values = { 'anti katana', 'none' }, Default = 'anti katana' });
 Trigger:AddDropdown('TriggerScope', { Text = 'check scoped if', Values = { 'Sniper', 'Always', 'Never' }, Default = 'Sniper' });
 
