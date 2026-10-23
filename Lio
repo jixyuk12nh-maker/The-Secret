@@ -1,0 +1,2030 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+
+local State = {
+UECounter = false,
+AntiUECounter = false,
+SolixCounter = false,
+SolixCounterRange = 45,
+KiciaCounter = false,
+KiciaStickCounter = false,
+KiciaStickRange = 12,
+KiciaCounterRange = 50,
+KiciaYMin = 613751818746169,
+KiciaYMax = 999999999999999,
+KiciaMoveTime = 1.0,
+KiciaStopTime = 0.35,
+UECYDistance = 500,
+UECTPDelay = 0.05,
+GNG = false,
+GNGMode = "UE"
+}
+
+local function getClosestPlayer()
+local myChar = LocalPlayer.Character
+local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
+if not myHrp then return nil end
+local closestCharacter = nil
+local closestDistance = math.huge
+for _, player in ipairs(Players:GetPlayers()) do
+if player ~= LocalPlayer then
+local character = player.Character
+local targetHrp = character and character:FindFirstChild("HumanoidRootPart")
+local targetHumanoid = character and character:FindFirstChildOfClass("Humanoid")
+if targetHrp and targetHumanoid and targetHumanoid.Health > 0 then
+local distance = (myHrp.Position - targetHrp.Position).Magnitude
+if distance < closestDistance then
+closestDistance = distance
+closestCharacter = character
+end
+end
+end
+end
+return closestCharacter
+end
+
+local function updateUECounter(hrp)
+if not State.UECounter or not hrp then
+_G.__uecLastTp = nil
+_G.__uecHoldCF = nil
+_G.__uecPulse = nil
+return
+end
+pcall(function()
+if not _G.__uecLastTp then _G.__uecLastTp = 0 end
+local delay = tonumber(State.UECTPDelay) or 0.05
+if delay < 0.01 then delay = 0.01 end
+local yDist = tonumber(State.UECYDistance) or 500
+if yDist < 1 then yDist = 1 end
+local now = tick()
+local targetChar = getClosestPlayer()
+local targetHrp = targetChar and targetChar:FindFirstChild("HumanoidRootPart")
+local baseX, baseZ = hrp.Position.X, hrp.Position.Z
+if targetHrp then
+baseX, baseZ = targetHrp.Position.X, targetHrp.Position.Z
+end
+local prevY = 50
+if _G.__uecHoldCF then
+prevY = _G.__uecHoldCF.Y
+elseif targetHrp then
+local targetY = targetHrp.Position.Y
+if targetY > -500 and targetY < 5000 then prevY = targetY end
+elseif math.abs(hrp.Position.Y) < 5000 then
+prevY = hrp.Position.Y
+end
+if now - _G.__uecLastTp >= delay then
+_G.__uecLastTp = now
+local fromY = hrp.Position.Y
+if fromY < -500 or fromY > 1e12 then fromY = prevY end
+local outY = fromY + yDist
+if outY > 1000000 and outY < 2000000 then outY = fromY + yDist + 50 end
+local cf = CFrame.new(baseX, outY, baseZ)
+_G.__uecHoldCF = cf
+for _ = 1, 16 do
+hrp.CFrame = cf
+hrp.AssemblyLinearVelocity = Vector3.zero
+hrp.AssemblyAngularVelocity = Vector3.zero
+end
+end
+hrp.Anchored = false
+end)
+end
+
+local function updateAntiUECounter(hrp)
+if not State.AntiUECounter or State.UECounter or not hrp then
+_G.__antiUecLastTY = nil
+return
+end
+pcall(function()
+local targetChar = getClosestPlayer()
+local targetHrp = targetChar and targetChar:FindFirstChild("HumanoidRootPart")
+if not targetHrp then return end
+local targetPos = targetHrp.Position
+local targetVel = targetHrp.AssemblyLinearVelocity
+if not _G.__antiUecLastTY then _G.__antiUecLastTY = targetPos.Y end
+local yDelta = math.abs(targetPos.Y - _G.__antiUecLastTY)
+_G.__antiUecLastTY = targetPos.Y
+local look = targetHrp.CFrame.LookVector
+local flat = Vector3.new(look.X, 0, look.Z)
+if flat.Magnitude < 0.05 then flat = Vector3.new(0, 0, -1) else flat = flat.Unit end
+local dest = targetPos + Vector3.new(0, 0.35, 0) - flat * 0.15
+local cf = CFrame.new(dest, dest + flat)
+for _ = 1, 16 do
+hrp.CFrame = cf
+hrp.AssemblyLinearVelocity = targetVel
+hrp.AssemblyAngularVelocity = Vector3.zero
+end
+if yDelta > 20 then
+for _ = 1, 10 do
+hrp.CFrame = CFrame.new(targetPos.X, targetPos.Y + 0.35, targetPos.Z)
+hrp.AssemblyLinearVelocity = targetVel
+end
+end
+end)
+end
+
+local solixLastEnemyDist = nil
+local solixLastEnemyPos = nil
+local solixLastEnemyVel = nil
+local solixEvadeUntil = 0
+local solixPhase = 0
+local solixOrigin = nil
+
+function updateSolixCounter(hrp, humanoid, char)
+if not State.SolixCounter or not hrp then
+solixLastEnemyDist = nil
+solixLastEnemyPos = nil
+solixLastEnemyVel = nil
+solixOrigin = nil
+return
+end
+pcall(function()
+local tChar = getClosestPlayer()
+if not tChar then return end
+local tHrp = tChar:FindFirstChild("HumanoidRootPart")
+local tHum = tChar:FindFirstChildOfClass("Humanoid")
+if not tHrp or not tHum or tHum.Health <= 0 then return end
+
+local myPos = hrp.Position
+local tPos = tHrp.Position
+local dist = (myPos - tPos).Magnitude
+local tVel = tHrp.AssemblyLinearVelocity
+local speed = tVel.Magnitude
+local range = tonumber(State.SolixCounterRange) or 80
+if range < 30 then range = 30 end
+if dist > range then return end
+
+local now = tick()
+solixPhase = (solixPhase + 1) % 6
+
+if not solixOrigin or (Vector3.new(myPos.X, 0, myPos.Z) - Vector3.new(solixOrigin.X, 0, solixOrigin.Z)).Magnitude > 160 then
+solixOrigin = Vector3.new(myPos.X, myPos.Y, myPos.Z)
+end
+
+local toMe = myPos - tPos
+local flatAway = Vector3.new(toMe.X, 0, toMe.Z)
+if flatAway.Magnitude < 0.08 then
+flatAway = Vector3.new(1, 0, 0)
+else
+flatAway = flatAway.Unit
+end
+local look = tHrp.CFrame.LookVector
+local lookFlat = Vector3.new(look.X, 0, look.Z)
+if lookFlat.Magnitude < 0.05 then lookFlat = Vector3.new(0, 0, -1) else lookFlat = lookFlat.Unit end
+local side = Vector3.new(-lookFlat.Z, 0, lookFlat.X)
+local sideSign = (math.floor(now * 31 + solixPhase) % 2 == 0) and 1 or -1
+
+local dest
+if solixPhase == 0 then
+local anti = Vector3.zero
+if speed > 2 then
+local fv = Vector3.new(tVel.X, 0, tVel.Z)
+if fv.Magnitude > 0.1 then anti = -fv.Unit * (30 + dist * 0.2) end
+end
+dest = myPos + anti + side * sideSign * (22 + math.random() * 16) + flatAway * (18 + math.random() * 12)
+dest = dest + Vector3.new(0, 8 + math.sin(now * 47) * 10, 0)
+elseif solixPhase == 1 then
+local push = (dist < 25) and (flatAway * (28 + math.random() * 16)) or (flatAway * -(12 + math.random() * 8))
+dest = myPos + push + side * sideSign * (20 + math.random() * 14)
+dest = dest + Vector3.new(0, 14 + math.abs(math.sin(now * 33)) * 14, 0)
+elseif solixPhase == 2 then
+local y = myPos.Y + (30 + math.sin(now * 53) * 18 + math.cos(now * 23) * 12)
+dest = Vector3.new(myPos.X + side.X * sideSign * (12 + math.random() * 10), y, myPos.Z + side.Z * sideSign * (12 + math.random() * 10))
+elseif solixPhase == 3 then
+local ang = now * 37 + solixPhase * 3.1
+local rad = 26 + math.sin(now * 15) * 12
+dest = Vector3.new(tPos.X + math.cos(ang) * rad, tPos.Y + 12 + math.sin(now * 43) * 12, tPos.Z + math.sin(ang) * rad)
+elseif solixPhase == 4 then
+dest = myPos - flatAway * (26 + math.random() * 16) + side * sideSign * (20 + math.random() * 14)
+dest = dest + Vector3.new(0, 12 + math.random() * 12, 0)
+else
+local ang = now * 41
+dest = tPos + Vector3.new(math.cos(ang) * 30, 18 + math.abs(math.sin(now * 29)) * 16, math.sin(ang) * 30)
+end
+
+if dest.Y > 1003900 and dest.Y < 1004200 then
+dest = Vector3.new(dest.X, dest.Y + 250, dest.Z)
+end
+if dest.Y < -150 then
+dest = Vector3.new(dest.X, math.max(myPos.Y, 8) + 12, dest.Z)
+end
+if solixOrigin then
+local flatD = Vector3.new(dest.X - solixOrigin.X, 0, dest.Z - solixOrigin.Z)
+if flatD.Magnitude > 200 then
+dest = Vector3.new(solixOrigin.X + flatD.Unit.X * 150, dest.Y, solixOrigin.Z + flatD.Unit.Z * 150)
+end
+end
+
+solixLastEnemyDist = dist
+solixLastEnemyPos = tPos
+solixLastEnemyVel = tVel
+
+local cf = CFrame.new(dest)
+for _ = 1, 26 do
+hrp.CFrame = cf
+if speed > 2 then
+local fv = Vector3.new(tVel.X, 0, tVel.Z)
+if fv.Magnitude > 0.1 then
+hrp.AssemblyLinearVelocity = -fv.Unit * 85
+else
+hrp.AssemblyLinearVelocity = Vector3.zero
+end
+else
+hrp.AssemblyLinearVelocity = Vector3.zero
+end
+hrp.AssemblyAngularVelocity = Vector3.zero
+end
+hrp.AssemblyLinearVelocity = Vector3.zero
+hrp.Anchored = false
+end)
+end
+
+local kiciaPhase = "move"
+local kiciaPhaseUntil = 0
+local kiciaHomeXZ = nil
+local kiciaWanderIdx = 0
+
+function updateKiciaCounter(hrp, humanoid, char)
+if not State.KiciaCounter or not hrp then
+kiciaPhase = "move"
+kiciaPhaseUntil = 0
+kiciaHomeXZ = nil
+return
+end
+pcall(function()
+local now = tick()
+local myPos = hrp.Position
+if not kiciaHomeXZ then
+kiciaHomeXZ = Vector3.new(myPos.X, 0, myPos.Z)
+end
+
+local yMin = tonumber(State.KiciaYMin) or 613751818746169
+local yMax = tonumber(State.KiciaYMax) or 999999999999999
+if yMax < yMin then
+yMin, yMax = yMax, yMin
+end
+local moveTime = tonumber(State.KiciaMoveTime) or 1.0
+if moveTime < 0.05 then moveTime = 0.05 end
+local stopTime = tonumber(State.KiciaStopTime) or 0.35
+if stopTime < 0 then stopTime = 0 end
+
+if now >= (kiciaPhaseUntil or 0) then
+if kiciaPhase == "move" and stopTime > 0 then
+kiciaPhase = "stop"
+kiciaPhaseUntil = now + stopTime
+else
+kiciaPhase = "move"
+kiciaPhaseUntil = now + moveTime
+end
+end
+
+if kiciaPhase == "stop" then
+local holdY = myPos.Y
+if holdY < yMin or holdY > yMax then
+holdY = yMin + (yMax - yMin) * 0.5
+end
+local cf = CFrame.new(myPos.X, holdY, myPos.Z)
+for _ = 1, 22 do
+hrp.CFrame = cf
+hrp.AssemblyLinearVelocity = Vector3.zero
+hrp.AssemblyAngularVelocity = Vector3.zero
+end
+hrp.Anchored = false
+return
+end
+
+kiciaWanderIdx = (kiciaWanderIdx or 0) + 1
+local t = now * 55 + kiciaWanderIdx * 0.7
+local ySpan = yMax - yMin
+
+local yWave = (math.sin(t * 1.7) * 0.5 + 0.5)
+local yWave2 = (math.cos(t * 2.3) * 0.5 + 0.5)
+local y = yMin + ySpan * (0.15 + 0.7 * yWave)
+
+if kiciaWanderIdx % 7 == 0 then
+y = yMin + ySpan * (kiciaWanderIdx % 2)
+elseif kiciaWanderIdx % 5 == 0 then
+y = yMin + ySpan * yWave2
+end
+if y < yMin then y = yMin end
+if y > yMax then y = yMax end
+
+local rad = 40 + (kiciaWanderIdx % 11) * 18
+local ang = t * 3.1
+local ox = math.cos(ang) * rad + math.sin(t * 8) * 25
+local oz = math.sin(ang) * rad + math.cos(t * 7) * 25
+local pos = Vector3.new(kiciaHomeXZ.X + ox, y, kiciaHomeXZ.Z + oz)
+
+local cf = CFrame.new(pos)
+for _ = 1, 30 do
+hrp.CFrame = cf
+hrp.AssemblyLinearVelocity = Vector3.zero
+hrp.AssemblyAngularVelocity = Vector3.zero
+end
+hrp.Anchored = false
+end)
+end
+
+local kiciaStickIdx = 0
+function updateKiciaStickCounter(hrp, humanoid, char)
+if not State.KiciaStickCounter or not hrp then return end
+pcall(function()
+local targetChar = getClosestPlayer()
+if not targetChar then return end
+local tHrp = targetChar:FindFirstChild("HumanoidRootPart")
+if not tHrp then return end
+local dist = (hrp.Position - tHrp.Position).Magnitude
+local range = tonumber(State.KiciaStickRange) or 12
+
+if dist > range then return end
+
+kiciaStickIdx = (kiciaStickIdx or 0) + 1
+local now = tick()
+local tpos = tHrp.Position
+local tlook = tHrp.CFrame.LookVector
+
+local phase = kiciaStickIdx % 6
+local offset
+if phase == 0 then
+offset = Vector3.new(0, 18 + (kiciaStickIdx % 5), 0)
+elseif phase == 1 then
+offset = -tlook * (22 + (kiciaStickIdx % 7)) + Vector3.new(0, 6, 0)
+elseif phase == 2 then
+offset = tHrp.CFrame.RightVector * (20 + (kiciaStickIdx % 9)) + Vector3.new(0, 8, 0)
+elseif phase == 3 then
+offset = -tHrp.CFrame.RightVector * (20 + (kiciaStickIdx % 8)) + Vector3.new(0, 10, 0)
+elseif phase == 4 then
+offset = tlook * 15 + Vector3.new(0, 25, 0)
+else
+local ang = now * 40
+offset = Vector3.new(math.cos(ang) * 28, 14, math.sin(ang) * 28)
+end
+local pos = tpos + offset
+local cf = CFrame.new(pos, tpos)
+hrp.Anchored = false
+for _ = 1, 18 do
+hrp.CFrame = cf
+hrp.AssemblyLinearVelocity = Vector3.zero
+hrp.AssemblyAngularVelocity = Vector3.zero
+end
+end)
+end
+
+local gngPhase = 0
+local gngAnchor = nil
+function updateGNG(hrp, humanoid, char)
+if not State.GNG or not hrp then
+gngAnchor = nil
+_G.__gngUecLastTp = nil
+_G.__gngUecHoldCF = nil
+return
+end
+pcall(function()
+local mode = tostring(State.GNGMode or "UE")
+local now = tick()
+gngPhase = (gngPhase + 1) % 8
+local myPos = hrp.Position
+local tChar = getClosestPlayer()
+local tHrp = tChar and tChar:FindFirstChild("HumanoidRootPart")
+local tPos = tHrp and tHrp.Position or myPos
+local tVel = tHrp and tHrp.AssemblyLinearVelocity or Vector3.zero
+
+if mode == "UE" then
+if not _G.__gngUecLastTp then _G.__gngUecLastTp = 0 end
+local delay = tonumber(State.UECTPDelay) or 0.05
+if delay < 0.01 then delay = 0.01 end
+local yDist = tonumber(State.UECYDistance) or 500
+if yDist < 1 then yDist = 1 end
+if yDist > 1000 then yDist = 1000 end
+local baseX, baseZ = myPos.X, myPos.Z
+if tHrp then
+baseX = tHrp.Position.X
+baseZ = tHrp.Position.Z
+end
+local prevY = 50
+if _G.__gngUecHoldCF then
+prevY = _G.__gngUecHoldCF.Y
+else
+if tHrp then
+local ty = tHrp.Position.Y
+if ty > -500 and ty < 5000 then prevY = ty end
+elseif math.abs(myPos.Y) < 5000 then
+prevY = myPos.Y
+end
+end
+if (now - _G.__gngUecLastTp) >= delay then
+_G.__gngUecLastTp = now
+local fromY = hrp.Position.Y
+if fromY < -500 or fromY > 1e12 then
+fromY = prevY
+end
+local oy = fromY + yDist
+if oy > 1000000 and oy < 2000000 then
+oy = fromY + yDist + 50
+end
+local cf = CFrame.new(baseX, oy, baseZ)
+_G.__gngUecHoldCF = cf
+for _ = 1, 16 do
+hrp.CFrame = cf
+hrp.AssemblyLinearVelocity = Vector3.zero
+hrp.AssemblyAngularVelocity = Vector3.zero
+end
+end
+
+hrp.Anchored = false
+return
+end
+
+if not gngAnchor or (Vector3.new(myPos.X,0,myPos.Z) - Vector3.new(gngAnchor.X,0,gngAnchor.Z)).Magnitude > 150 then
+if math.abs(myPos.Y) < 5000 then
+gngAnchor = Vector3.new(myPos.X, myPos.Y, myPos.Z)
+else
+gngAnchor = Vector3.new(0, 50, 0)
+end
+end
+
+local dest
+if mode == "Solix" then
+local toMe = myPos - tPos
+local flat = Vector3.new(toMe.X, 0, toMe.Z)
+if flat.Magnitude < 0.1 then flat = Vector3.new(1, 0, 0) else flat = flat.Unit end
+local side = Vector3.new(-flat.Z, 0, flat.X)
+local sign = (math.floor(now * 31 + gngPhase) % 2 == 0) and 1 or -1
+local anti = Vector3.zero
+if tVel.Magnitude > 1.0 then
+local fv = Vector3.new(tVel.X, 0, tVel.Z)
+if fv.Magnitude > 0.1 then
+anti = -fv.Unit * (32 + gngPhase * 6)
+end
+end
+local phase = gngPhase % 5
+if phase == 0 then
+dest = myPos + anti + side * sign * (24 + math.random() * 16) + flat * (14 + math.random() * 10)
+dest = dest + Vector3.new(0, 10 + math.sin(now * 47) * 12, 0)
+elseif phase == 1 then
+dest = tPos + side * sign * (36 + math.random() * 18) - flat * 24
+dest = dest + Vector3.new(0, 24 + math.random() * 20, 0)
+elseif phase == 2 then
+local y = myPos.Y + (28 + math.sin(now * 53) * 16)
+dest = Vector3.new(myPos.X + side.X * sign * 14, y, myPos.Z + side.Z * sign * 14)
+elseif phase == 3 then
+local ang = now * 41
+dest = Vector3.new(tPos.X + math.cos(ang) * 32, tPos.Y + 16 + math.abs(math.sin(now * 29)) * 18, tPos.Z + math.sin(ang) * 32)
+else
+dest = myPos - flat * (28 + math.random() * 16) + side * sign * (22 + math.random() * 14)
+dest = dest + Vector3.new(0, 14 + math.random() * 12, 0)
+end
+elseif mode == "Kicia" then
+local tLook = tHrp and tHrp.CFrame.LookVector or Vector3.new(0,0,-1)
+local tLookFlat = Vector3.new(tLook.X, 0, tLook.Z)
+if tLookFlat.Magnitude < 0.05 then tLookFlat = Vector3.new(0,0,-1) else tLookFlat = tLookFlat.Unit end
+local side = Vector3.new(-tLookFlat.Z, 0, tLookFlat.X)
+local sign = (math.floor(now * 11) % 2 == 0) and 1 or -1
+local dist = (myPos - tPos).Magnitude
+if dist < 8 then
+dest = tPos + side * sign * (16 + math.random() * 10)
++ tLookFlat * (-6)
++ Vector3.new(0, 10 + math.random() * 8, 0)
+elseif gngPhase % 4 == 0 then
+local ang = now * 15 + gngPhase
+local rad = 18 + math.sin(now * 7) * 8
+dest = Vector3.new(
+tPos.X + math.cos(ang) * rad,
+tPos.Y + 10 + math.abs(math.sin(now * 25)) * 12,
+tPos.Z + math.sin(ang) * rad
+)
+elseif gngPhase % 4 == 1 then
+dest = tPos + side * sign * (12 + math.random() * 8) + tLookFlat * 5
+dest = Vector3.new(dest.X, tPos.Y + 5 + math.sin(now * 19) * 3, dest.Z)
+else
+local ang = now * 12 + gngPhase * 0.9
+local rad = 20 + math.sin(now * 6) * 8
+dest = Vector3.new(
+tPos.X + math.cos(ang) * rad,
+tPos.Y + 12 + math.abs(math.sin(now * 21)) * 14,
+tPos.Z + math.sin(ang) * rad
+)
+end
+if (dest - tPos).Magnitude < 10 then
+dest = tPos + Vector3.new(math.cos(now * 9) * 22, 14, math.sin(now * 9) * 22)
+end
+else
+dest = Vector3.new(myPos.X, myPos.Y + 50, myPos.Z)
+end
+
+if dest.Y > 1003900 and dest.Y < 1004200 then
+dest = Vector3.new(dest.X, dest.Y + 250, dest.Z)
+end
+if dest.Y < -100 then
+dest = Vector3.new(dest.X, 40, dest.Z)
+end
+
+local cf = CFrame.new(dest)
+local loops = (mode == "Kicia" or mode == "Solix") and 28 or 14
+for _ = 1, loops do
+hrp.CFrame = cf
+hrp.AssemblyLinearVelocity = Vector3.zero
+hrp.AssemblyAngularVelocity = Vector3.zero
+end
+hrp.Anchored = false
+end)
+end
+
+local function updateCounters()
+local character = LocalPlayer.Character
+local hrp = character and character:FindFirstChild("HumanoidRootPart")
+local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+if not character or not hrp or not humanoid or humanoid.Health <= 0 then return end
+updateUECounter(hrp)
+updateAntiUECounter(hrp)
+if State.SolixCounter then pcall(function() updateSolixCounter(hrp, humanoid, character) end) end
+if State.KiciaCounter then pcall(function() updateKiciaCounter(hrp, humanoid, character) end) end
+if State.KiciaStickCounter then pcall(function() updateKiciaStickCounter(hrp, humanoid, character) end) end
+if State.GNG then pcall(function() updateGNG(hrp, humanoid, character) end) end
+end
+
+local counterConnection = RunService.Heartbeat:Connect(updateCounters)
+
+_G.__chanhyukCounterOnlyUnload = function()
+if counterConnection then
+counterConnection:Disconnect()
+counterConnection = nil
+end
+_G.__uecLastTp = nil
+_G.__uecHoldCF = nil
+_G.__uecPulse = nil
+_G.__antiUecLastTY = nil
+end
+
+local uiLoaded, Library = pcall(function()
+return loadstring(game:HttpGet("https://raw.githubusercontent.com/jixyuk12nh-maker/The-Secret/main/Library.lua"))()
+end)
+
+if not uiLoaded or not Library then
+warn("[Counter UI] The-Secret library failed to load")
+return
+end
+
+Library.ForceCheckbox = true
+
+local ThemeManager
+local SaveManager
+pcall(function()
+local base = "https://raw.githubusercontent.com/deividcomsono/Obsidian/main/"
+ThemeManager = loadstring(game:HttpGet(base .. "addons/ThemeManager.lua"))()
+SaveManager = loadstring(game:HttpGet(base .. "addons/SaveManager.lua"))()
+end)
+
+local Window = Library:CreateWindow({
+Title = "Counter",
+Footer = "Made by jinhyuk",
+Center = true,
+AutoShow = true,
+ToggleKeybind = Enum.KeyCode.RightControl,
+NotifySide = "Right",
+ShowCustomCursor = false,
+Size = UDim2.fromOffset(1000, 550)
+})
+
+local CombatTab = Window:AddTab("전투", "sword")
+local HvhTab = Window:AddTab("HvH", "shield")
+local HalloweenTab = Window:AddTab("Halloween", "ghost")
+local SettingsTab = Window:AddTab("설정", "settings")
+
+local CounterBox = CombatTab:AddLeftGroupbox("Counter Mode")
+
+local CounterOptions = {}
+local selectedCounter = "UE Counter"
+
+local function addToggleKeybind(toggleOption, keyName, callback)
+if toggleOption and toggleOption.AddKeyPicker then
+toggleOption:AddKeyPicker(keyName, {
+Default = "None",
+SyncToggleState = true,
+Mode = "Toggle",
+Text = "빠른 토글 키",
+Callback = callback
+})
+end
+end
+
+local counterVisibility = {
+["UE Counter"] = {"UECounter", "UECYDistance", "UECTPDelay", "AntiUECounter"},
+["Solix Counter"] = {"SolixCounter", "SolixCounterRange"},
+["Kicia Counter"] = {"KiciaCounter", "KiciaCounterRange", "KiciaYMin", "KiciaYMax", "KiciaMoveTime", "KiciaStopTime", "KiciaStickCounter", "KiciaStickRange"},
+["GNG"] = {"GNG", "GNGMode", "AntiUECounter"}
+}
+
+CounterOptions.Select = CounterBox:AddDropdown("CounterSelect", {
+Text = "카운터 선택",
+Values = {"UE Counter", "Solix Counter", "Kicia Counter", "GNG"},
+Default = "UE Counter",
+Callback = function(value)
+selectedCounter = tostring(value or "UE Counter")
+for name, option in pairs(CounterOptions) do
+if name ~= "Select" and option and option.SetVisible then
+option:SetVisible(false)
+end
+end
+for _, key in ipairs(counterVisibility[selectedCounter] or {}) do
+local option = CounterOptions[key]
+if option and option.SetVisible then option:SetVisible(true) end
+end
+if selectedCounter == "GNG" and State.GNGMode ~= "UE" then
+if CounterOptions.AntiUECounter and CounterOptions.AntiUECounter.SetVisible then
+CounterOptions.AntiUECounter:SetVisible(false)
+end
+end
+end
+})
+
+CounterOptions.UECounter = CounterBox:AddToggle("UECounter", {
+Text = "UE Counter", Default = State.UECounter, Visible = false,
+Callback = function(value) State.UECounter = value == true end
+})
+addToggleKeybind(CounterOptions.UECounter, "UECounterKey")
+
+CounterOptions.AntiUECounter = CounterBox:AddToggle("AntiUECounter", {
+Text = "Anti UE Counter", Default = State.AntiUECounter,
+Visible = true,
+Callback = function(value) State.AntiUECounter = value == true end
+})
+addToggleKeybind(CounterOptions.AntiUECounter, "AntiUECounterKey")
+
+CounterOptions.SolixCounter = CounterBox:AddToggle("SolixCounter", {
+Text = "Solix Counter", Default = State.SolixCounter, Visible = false,
+Callback = function(value) State.SolixCounter = value == true end
+})
+addToggleKeybind(CounterOptions.SolixCounter, "SolixCounterKey")
+
+CounterOptions.KiciaCounter = CounterBox:AddToggle("KiciaCounter", {
+Text = "Kicia Counter", Default = State.KiciaCounter, Visible = false,
+Callback = function(value) State.KiciaCounter = value == true end
+})
+addToggleKeybind(CounterOptions.KiciaCounter, "KiciaCounterKey")
+
+CounterOptions.KiciaStickCounter = CounterBox:AddToggle("KiciaStickCounter", {
+Text = "Kicia Stick Counter", Default = State.KiciaStickCounter, Visible = false,
+Callback = function(value) State.KiciaStickCounter = value == true end
+})
+addToggleKeybind(CounterOptions.KiciaStickCounter, "KiciaStickCounterKey")
+
+CounterOptions.GNG = CounterBox:AddToggle("GNG", {
+Text = "GNG", Default = State.GNG, Visible = false,
+Callback = function(value) State.GNG = value == true end
+})
+addToggleKeybind(CounterOptions.GNG, "GNGKey")
+
+CounterOptions.UECYDistance = CounterBox:AddInput("UECYDistance", {
+Text = "Y 거리", Default = tostring(State.UECYDistance), Numeric = true, Visible = false,
+Callback = function(value) State.UECYDistance = tonumber(value) or State.UECYDistance end
+})
+CounterOptions.UECTPDelay = CounterBox:AddInput("UECTPDelay", {
+Text = "텔레포트 딜레이", Default = tostring(State.UECTPDelay), Numeric = true, Visible = false,
+Callback = function(value) State.UECTPDelay = tonumber(value) or State.UECTPDelay end
+})
+
+CounterOptions.SolixCounterRange = CounterBox:AddInput("SolixCounterRange", {
+Text = "범위", Default = tostring(State.SolixCounterRange), Numeric = true, Visible = false,
+Callback = function(value) State.SolixCounterRange = tonumber(value) or State.SolixCounterRange end
+})
+
+CounterOptions.KiciaCounterRange = CounterBox:AddInput("KiciaCounterRange", {
+Text = "범위", Default = tostring(State.KiciaCounterRange), Numeric = true, Visible = false,
+Callback = function(value) State.KiciaCounterRange = tonumber(value) or State.KiciaCounterRange end
+})
+CounterOptions.KiciaStickRange = CounterBox:AddInput("KiciaStickRange", {
+Text = "스틱 범위", Default = tostring(State.KiciaStickRange), Numeric = true, Visible = false,
+Callback = function(value) State.KiciaStickRange = tonumber(value) or State.KiciaStickRange end
+})
+CounterOptions.KiciaYMin = CounterBox:AddInput("KiciaYMin", {
+Text = "Y 최소값", Default = tostring(State.KiciaYMin), Numeric = true, Visible = false,
+Callback = function(value) State.KiciaYMin = tonumber(value) or State.KiciaYMin end
+})
+CounterOptions.KiciaYMax = CounterBox:AddInput("KiciaYMax", {
+Text = "Y 최대값", Default = tostring(State.KiciaYMax), Numeric = true, Visible = false,
+Callback = function(value) State.KiciaYMax = tonumber(value) or State.KiciaYMax end
+})
+CounterOptions.KiciaMoveTime = CounterBox:AddInput("KiciaMoveTime", {
+Text = "이동 시간", Default = tostring(State.KiciaMoveTime), Numeric = true, Visible = false,
+Callback = function(value) State.KiciaMoveTime = tonumber(value) or State.KiciaMoveTime end
+})
+CounterOptions.KiciaStopTime = CounterBox:AddInput("KiciaStopTime", {
+Text = "정지 시간", Default = tostring(State.KiciaStopTime), Numeric = true, Visible = false,
+Callback = function(value) State.KiciaStopTime = tonumber(value) or State.KiciaStopTime end
+})
+
+CounterOptions.GNGMode = CounterBox:AddDropdown("GNGMode", {
+Text = "GNG 모드", Values = {"UE", "Solix", "Kicia"}, Default = State.GNGMode,
+Visible = false, Callback = function(value)
+State.GNGMode = tostring(value or "UE")
+if selectedCounter == "GNG" then
+local show = (State.GNGMode == "UE")
+if CounterOptions.AntiUECounter and CounterOptions.AntiUECounter.SetVisible then
+CounterOptions.AntiUECounter:SetVisible(show)
+end
+end
+end
+})
+
+for name, option in pairs(CounterOptions) do
+if name ~= "Select" and option and option.SetVisible then option:SetVisible(false) end
+end
+CounterOptions.UECounter:SetVisible(true)
+CounterOptions.UECYDistance:SetVisible(true)
+CounterOptions.UECTPDelay:SetVisible(true)
+CounterOptions.AntiUECounter:SetVisible(true)
+
+if ThemeManager and SaveManager then
+pcall(function()
+ThemeManager:SetLibrary(Library)
+SaveManager:SetLibrary(Library)
+SaveManager:IgnoreThemeSettings()
+ThemeManager:SetFolder("chanhyuk-counter")
+SaveManager:SetFolder("chanhyuk-counter/configs")
+SaveManager:BuildConfigSection(SettingsTab)
+ThemeManager:ApplyToTab(SettingsTab)
+end)
+end
+
+pcall(function()
+Library:OnUnload(function()
+if _G.__chanhyukCounterOnlyUnload then
+_G.__chanhyukCounterOnlyUnload()
+end
+end)
+end)-- ===== Ragebot / Rage / Speed Control (ported from Minho Hub) =====
+do
+local Toggles = Library.Toggles
+local Options = Library.Options
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ws = workspace
+
+local Config = {
+	Enabled = false,
+	EvasionMode = "Random",
+	HitAboveY = 0.5,
+	SpeedBoostMult = 0,
+	Weapons = {
+		Priority = { "Primary", "Secondary", "Melee" },
+		Enabled  = { Primary = true, Secondary = true, Melee = true, Utility = false },
+		OnEmpty  = "SwapOrReload",
+	},
+	AutoPickup = { Enabled = true, Range = 250, Health = true, Ammo = true },
+}
+
+local FAR = 1073741824
+local DIRECTIONS = {
+	Vector3.new( FAR, 0, 0), Vector3.new(-FAR, 0, 0),
+	Vector3.new(0, 0,  FAR), Vector3.new(0, 0, -FAR),
+	Vector3.new(0,  FAR, 0), Vector3.new(0, -FAR, 0),
+}
+local DIR_NAMES = { "E", "W", "S", "N", "Up", "Down" }
+local escapeIndex = 0
+local function cycleEscape()
+	escapeIndex = (escapeIndex % #DIRECTIONS) + 1
+	return DIRECTIONS[escapeIndex], DIR_NAMES[escapeIndex]
+end
+
+local function getOneWayPing()
+	return 0.5 * LocalPlayer:GetNetworkPing()
+end
+local function getEstimatedReplicationDelay()
+	return getOneWayPing() + 0.05
+end
+local function getEstimatedRemoteDelay()
+	return getOneWayPing() + 0.016666666666666666
+end
+
+local ReloadTransport = {
+	gun = nil, readyAt = nil, pendingAmmo = nil, ackDeadline = nil, lastShotCount = 0,
+}
+local function clearReloadTransport()
+	ReloadTransport.gun = nil
+	ReloadTransport.readyAt = nil
+	ReloadTransport.pendingAmmo = nil
+	ReloadTransport.ackDeadline = nil
+	ReloadTransport.lastShotCount = 0
+end
+
+local function itemField(obj, key)
+	if obj == nil then return nil end
+	local ok, v = pcall(function() return obj[key] end)
+	return ok and v or nil
+end
+
+local function getGunAmmo(item)
+	return itemField(itemField(item, "Data"), "Ammo")
+end
+local function getGunReserve(item)
+	local r = itemField(itemField(item, "Data"), "AmmoReserve")
+	if r == nil then return math.huge end
+	return r
+end
+local function getShotRequestCount(item)
+	local n = itemField(item, "ShotRequestCount")
+	if type(n) == "number" then return n end
+	return 0
+end
+local function getExpectedAmmo(item)
+	local fn = itemField(item, "GetExpectedAmmoAfterPendingShots")
+	if type(fn) == "function" then
+		local ok, v = pcall(function() return item:GetExpectedAmmoAfterPendingShots() end)
+		if ok then return v end
+	end
+	return getGunAmmo(item)
+end
+local function getMaxAmmo(item)
+	if not item then return nil end
+	local maxAmmo = itemField(itemField(item, "Info"), "MaxAmmo")
+	if maxAmmo ~= nil then return maxAmmo end
+	return itemField(itemField(itemField(item, "Inner"), "Info"), "MaxAmmo")
+end
+local function isMagFull(item)
+	if not item then return true end
+	local ammo = getGunAmmo(item)
+	local maxAmmo = getMaxAmmo(item)
+	if ammo == nil then return true end
+	if maxAmmo == nil then return false end
+	return ammo >= maxAmmo
+end
+
+local function getRoot()
+	local c = LocalPlayer.Character
+	return c and c:FindFirstChild("HumanoidRootPart")
+end
+local function getHum()
+	local c = LocalPlayer.Character
+	return c and c:FindFirstChildOfClass("Humanoid")
+end
+local function getFighter()
+	local ok, ctrl = pcall(function()
+		return require(LocalPlayer.PlayerScripts.Controllers.FighterController)
+	end)
+	if not ok or not ctrl then return nil end
+	return rawget(ctrl, "LocalFighter") or (ctrl.GetFighter and ctrl:GetFighter(LocalPlayer))
+end
+
+local function getItems()
+	local fighter = getFighter()
+	if fighter == nil then return nil end
+	local direct = itemField(fighter, "Items")
+	if type(direct) == "table" then return direct end
+	return nil
+end
+
+local function getEquippedItem()
+	local fighter = getFighter()
+	if fighter == nil then return nil end
+	local equipped = itemField(fighter, "EquippedItem")
+	if equipped ~= nil then return equipped end
+	local items = getItems()
+	if items ~= nil then
+		for _, entry in pairs(items) do
+			if itemField(entry, "IsEquipped") == true then return entry end
+		end
+	end
+	return nil
+end
+
+local function itemIndex(item)
+	if item == nil then return nil end
+	return itemField(itemField(item, "Data"), "ItemIndex")
+end
+local function itemType(item)
+	if item == nil then return nil end
+	return itemField(itemField(item, "Info"), "Type")
+end
+local function itemClass(item)
+	if item == nil then return nil end
+	local class = itemField(itemField(item, "Info"), "Class")
+	if class ~= nil then return class end
+	local index = itemIndex(item)
+	return index and ({ "Primary", "Secondary", "Melee", "Utility" })[index] or nil
+end
+local function isReloading(item)
+	if not item then return false end
+	local ok, v = pcall(function() return item:IsReloading() end)
+	if ok and v ~= nil then return v == true end
+	return false
+end
+
+local function equipItem(item)
+	if item == nil then return false end
+	if itemField(item, "IsEquipped") == true then return true end
+	local fighter = itemField(item, "ClientFighter") or getFighter()
+	local index = itemIndex(item)
+	if fighter == nil or index == nil then
+		return (pcall(function() item:Equip() end))
+	end
+	if pcall(function() fighter:EquipItem(index) end) then return true end
+	return (pcall(function() item:Equip() end))
+end
+
+local function weaponAction()
+	local weapons = Config.Weapons
+	local onEmpty = weapons.OnEmpty
+	local best, bestRank = nil, math.huge
+	local emptyBest, emptyRank = nil, math.huge
+	local utilityItem = nil
+	local anyEnabled = false
+
+	local function consider(entry)
+		local class = itemClass(entry)
+		if class == nil then return end
+		if class == "Utility" then
+			if utilityItem == nil then utilityItem = entry end
+			if weapons.Enabled.Utility then anyEnabled = true end
+			return
+		end
+		if weapons.Enabled[class] ~= true then return end
+		anyEnabled = true
+
+		local data = itemField(entry, "Data")
+		local ammo = itemField(data, "Ammo")
+		local reserve = itemField(data, "AmmoReserve")
+		local rank = table.find(weapons.Priority, class) or math.huge
+		local isGun = itemType(entry) == "Gun"
+		local record = { item = entry, empty = false }
+
+		if isGun and ammo == 0 then
+			if (reserve == nil or reserve > 0) and rank < emptyRank then
+				record.empty = true
+				if onEmpty == "Reload" then
+					bestRank, best = rank, record
+				else
+					emptyRank, emptyBest = rank, record
+				end
+			end
+		elseif best == nil or rank < bestRank then
+			bestRank, best = rank, record
+		end
+	end
+
+	local items = getItems()
+	if items ~= nil then
+		for _, entry in pairs(items) do consider(entry) end
+	end
+	if not anyEnabled then return nil end
+
+	if weapons.Enabled.Utility and utilityItem ~= nil then
+		if itemField(utilityItem, "IsEquipped") ~= true then
+			return { type = "Swap", item = utilityItem }
+		end
+		return { type = "Utility", item = utilityItem }
+	end
+
+	if best == nil then
+		if onEmpty == "Swap" or emptyBest == nil then return nil end
+		local equipped = itemField(emptyBest.item, "IsEquipped") == true
+		return { type = equipped and "Reload" or "Swap", item = emptyBest.item }
+	end
+	if itemField(best.item, "IsEquipped") ~= true then
+		return { type = "Swap", item = best.item }
+	end
+	if best.empty then return { type = "Reload", item = best.item } end
+	return { type = "Attack", item = best.item }
+end
+
+local MELEE_KEYWORDS = { "knife", "katana", "sword", "dagger", "axe",
+	"hammer", "bat", "scythe", "fist", "melee", "blade" }
+
+local ItemCache = nil
+local function getItemLib()
+	if ItemCache then return ItemCache end
+	local ok, lib = pcall(function()
+		return require(ReplicatedStorage.Modules.ItemLibrary)
+	end)
+	if ok and lib and lib.Items then ItemCache = lib.Items end
+	return ItemCache
+end
+local function getItemInfo(item)
+	if not item then return nil end
+	local name = rawget(item, "Name")
+	if not name then return nil end
+	local items = getItemLib()
+	return items and items[name] or nil
+end
+
+local function isMelee(item)
+	if not item then return false end
+	local name = rawget(item, "Name")
+	if not name then return false end
+	if name == "Fists" then return true end
+	local info = getItemInfo(item)
+	if info then
+		if info.Class == "Melee" then return true end
+		if info.Type == "Melee" then return true end
+	end
+	local lower = name:lower()
+	for _, kw in ipairs(MELEE_KEYWORDS) do
+		if lower:find(kw, 1, true) then return true end
+	end
+	return false
+end
+
+local function isInvincible(character)
+	if not character then return true end
+	local root = character:FindFirstChild("HumanoidRootPart")
+	if not root then return true end
+	for _, obj in pairs(root:GetChildren()) do
+		if obj:IsA("Attachment") and obj.Name == "Attachment" then return true end
+	end
+	if character:FindFirstChild("InvincibilityParticles", true) then return true end
+	if character:FindFirstChildOfClass("ForceField") then return true end
+	return false
+end
+
+local function isDead(character)
+	if not character or not character.Parent then return true end
+	local hum = character:FindFirstChildOfClass("Humanoid")
+	return not hum or hum.Health <= 0
+end
+
+local function getHead(character)
+	if not character then return nil end
+	return character:FindFirstChild("Head") or character:FindFirstChild("HitboxHead")
+end
+
+local function pickRageTargetPart(character)
+	if not character then return nil end
+	return character:FindFirstChild("HitboxHead") or character:FindFirstChild("Head")
+end
+
+local function isInMatch()
+	local pg = LocalPlayer:FindFirstChild("PlayerGui")
+	if not pg then return false end
+	local main = pg:FindFirstChild("MainGui")
+	if not main then return false end
+	local frame = main:FindFirstChild("MainFrame")
+	if not frame then return false end
+	local lobby = frame:FindFirstChild("Lobby")
+	if not lobby then return false end
+	local currency = lobby:FindFirstChild("Currency")
+	if not currency then return false end
+	return not currency.Visible
+end
+
+local useItemRemote = ReplicatedStorage.Remotes.Replication.Fighter.UseItem
+local util  = require(ReplicatedStorage.Modules.Utility)
+local enums = require(ReplicatedStorage.Modules.EnumLibrary)
+
+local Desync = { _cframe = nil, _oldCFrame = nil, _part = nil, _mode = "off" }
+local function desyncSetEnemy(cf) Desync._cframe = cf Desync._mode = "enemy" end
+local function desyncSetScatter(cf) Desync._cframe = cf Desync._mode = "scatter" end
+local function desyncClear()
+	if Desync._part and Desync._part.Parent and Desync._oldCFrame then
+		pcall(function() Desync._part.CFrame = Desync._oldCFrame end)
+	end
+	Desync._cframe = nil
+	Desync._oldCFrame = nil
+	Desync._part = nil
+	Desync._mode = "off"
+end
+local function desyncPush(root)
+	if root == nil or Desync._cframe == nil then return end
+	Desync._oldCFrame = root.CFrame
+	Desync._part = root
+	root.CFrame = Desync._cframe
+end
+local function desyncRestore()
+	local old = Desync._oldCFrame
+	if old == nil then return end
+	local part = Desync._part
+	Desync._oldCFrame = nil
+	if part and part.Parent then part.CFrame = old end
+end
+
+if not getgenv().__MinhoRageDesyncBound then
+	getgenv().__MinhoRageDesyncBound = true
+	RunService:BindToRenderStep("\0minho_rage_desync\0", Enum.RenderPriority.First.Value, desyncRestore)
+end
+
+local speedBoostOriginal = getgenv().__MinhoRageSpeedBoost or nil
+getgenv().__MinhoRageSpeedBoost = speedBoostOriginal
+
+local NoRecoilOriginals = getgenv().__MinhoNoRecoilOriginals or {}
+getgenv().__MinhoNoRecoilOriginals = NoRecoilOriginals
+
+local function applyNoRecoil()
+	local ok, lib = pcall(function() return require(ReplicatedStorage.Modules.ItemLibrary) end)
+	if not ok or not lib or type(lib.Items) ~= "table" then return end
+	for _, data in pairs(lib.Items) do
+		if type(data) == "table" and type(data.ShootRecoil) == "number" then
+			if NoRecoilOriginals[data] == nil then NoRecoilOriginals[data] = data.ShootRecoil end
+			data.ShootRecoil = 0
+		end
+	end
+	local fighter = getFighter()
+	if fighter and type(fighter.Items) == "table" then
+		for _, item in pairs(fighter.Items) do
+			local info = itemField(item, "Info")
+			if type(info) == "table" and type(info.ShootRecoil) == "number" then
+				if NoRecoilOriginals[info] == nil then NoRecoilOriginals[info] = info.ShootRecoil end
+				info.ShootRecoil = 0
+			end
+		end
+	end
+end
+
+local function revertNoRecoil()
+	for data, orig in pairs(NoRecoilOriginals) do
+		if type(data) == "table" then
+			pcall(function() data.ShootRecoil = orig end)
+		end
+	end
+	NoRecoilOriginals = {}
+	getgenv().__MinhoNoRecoilOriginals = NoRecoilOriginals
+end
+
+local SPECIAL_BASE = 75
+local SpecialCooldownOriginals = getgenv().__MinhoSpecialCooldownOriginals or {
+	DashCooldown = {}, SpinCooldown = {}, DeflectCooldown = {},
+	HeavyAttackCooldown = {}, AttackCooldown = {}, ShootCooldown = {},
+}
+getgenv().__MinhoSpecialCooldownOriginals = SpecialCooldownOriginals
+
+local function safeToggle(id)
+	local t = Toggles and Toggles[id]
+	return t ~= nil and t.Value == true
+end
+local function safeOption(id, default)
+	local o = Options and Options[id]
+	if o == nil or o.Value == nil then return default end
+	return o.Value
+end
+
+-- scales one cooldown field: keeps original in `store`, applies factor when on
+local function scaleCooldown(store, obj, field, on, val, minV)
+	if type(obj[field]) ~= "number" then return end
+	if store[obj] == nil then store[obj] = obj[field] end
+	if on then
+		obj[field] = math.max(minV, store[obj] * (val / SPECIAL_BASE))
+	else
+		obj[field] = store[obj]
+	end
+end
+
+local function applySpecialCooldowns()
+	local ok, lib = pcall(function() return require(ReplicatedStorage.Modules.ItemLibrary) end)
+	if not ok or not lib or type(lib.Items) ~= "table" then return end
+
+	local scytheOn, scytheVal = safeToggle("ScytheDashToggle"), safeOption("ScytheDashSlider", SPECIAL_BASE)
+	local axeOn, axeVal       = safeToggle("AxeSpinToggle"), safeOption("AxeSpinSlider", SPECIAL_BASE)
+	local katanaOn, katanaVal = safeToggle("KatanaDeflectToggle"), safeOption("KatanaDeflectSlider", SPECIAL_BASE)
+	local knifeOn, knifeVal   = safeToggle("KnifeHeavyToggle"), safeOption("KnifeHeavySlider", SPECIAL_BASE)
+	local gunOn, gunVal       = safeToggle("FireCooldownEnabled"), safeOption("FireCooldownSlider", SPECIAL_BASE)
+	local meleeOn, meleeVal   = safeToggle("MeleeCooldownEnabled"), safeOption("MeleeCooldownSlider", SPECIAL_BASE)
+
+	local GUN_MIN, MELEE_MIN = 0.02, 0
+	local S = SpecialCooldownOriginals
+
+	local function apply(obj)
+		scaleCooldown(S.DashCooldown,        obj, "DashCooldown",        scytheOn,  scytheVal, 0.001)
+		scaleCooldown(S.SpinCooldown,        obj, "SpinCooldown",        axeOn,     axeVal,    0.001)
+		scaleCooldown(S.DeflectCooldown,     obj, "DeflectCooldown",     katanaOn,  katanaVal, 0.001)
+		scaleCooldown(S.HeavyAttackCooldown, obj, "HeavyAttackCooldown", knifeOn,   knifeVal,  0.001)
+		scaleCooldown(S.ShootCooldown,       obj, "ShootCooldown",       gunOn,     gunVal,    GUN_MIN)
+		scaleCooldown(S.AttackCooldown,      obj, "AttackCooldown",      meleeOn,   meleeVal,  MELEE_MIN)
+	end
+
+	for _, data in pairs(lib.Items) do
+		if type(data) == "table" then apply(data) end
+	end
+
+	local fighter = getFighter()
+	if fighter and type(fighter.Items) == "table" then
+		for _, item in pairs(fighter.Items) do
+			local info = itemField(item, "Info")
+			if type(info) == "table" then apply(info) end
+		end
+	end
+end
+
+local function applySpeedBoost()
+	if speedBoostOriginal ~= nil then return end
+	local ok, lib = pcall(function() return require(ReplicatedStorage.Modules.ItemLibrary) end)
+	if not ok or not lib or not lib.Items then return end
+	speedBoostOriginal = {}
+	local FIELDS = {
+		"ShootCooldown", "ShootBurstCooldown", "ShootRecoil", "ShootSpread",
+		"AttackCooldown", "AttackDelay", "SwingCooldown", "MeleeCooldown",
+		"Cooldown", "RecoveryTime", "ResetTime", "SwingTime", "SwingDelay",
+		"ComboCooldown", "FireCooldown", "ReloadLength",
+	}
+	local mult = Config.SpeedBoostMult
+	for name, data in pairs(lib.Items) do
+		if type(data) == "table" then
+			local orig = {}
+			for _, f in ipairs(FIELDS) do
+				if data[f] ~= nil then
+					orig[f] = data[f]
+					if type(data[f]) == "number" then data[f] = data[f] * mult end
+				end
+			end
+			if next(orig) ~= nil then speedBoostOriginal[name] = orig end
+		end
+	end
+	if next(speedBoostOriginal) == nil then speedBoostOriginal = nil end
+	getgenv().__MinhoRageSpeedBoost = speedBoostOriginal
+end
+
+local function removeSpeedBoost()
+	if speedBoostOriginal == nil then return end
+	local ok, lib = pcall(function() return require(ReplicatedStorage.Modules.ItemLibrary) end)
+	if ok and lib and lib.Items then
+		for name, orig in pairs(speedBoostOriginal) do
+			local data = lib.Items[name]
+			if type(data) == "table" then
+				for f, base in pairs(orig) do data[f] = base end
+			end
+		end
+	end
+	speedBoostOriginal = nil
+	getgenv().__MinhoRageSpeedBoost = nil
+end
+
+local function doFire(part)
+	local fighter = getFighter()
+	local item = fighter and fighter.EquippedItem
+	if not item or not part then return false end
+	local cam = ws.CurrentCamera
+	local fromPos = (Desync._mode == "enemy" and Desync._cframe and Desync._cframe.Position)
+		or (cam and cam.CFrame.Position) or part.Position
+	local look = CFrame.new(fromPos, part.Position)
+	local data = {
+		[utf8.char(0)] = util:EncodeCFrame(look),
+		[utf8.char(1)] = util:EncodeCFrame(look),
+		[utf8.char(2)] = part,
+		[utf8.char(3)] = util:EncodeCFrame(part.CFrame:ToObjectSpace(CFrame.new(part.Position))),
+	}
+	local oid = item:Get("ObjectID")
+	local shootEnum = enums:ToEnum("StartShooting")
+	if not (oid and shootEnum) then return false end
+	return (pcall(function()
+		useItemRemote:FireServer(oid, shootEnum, { [utf8.char(1)] = data }, nil)
+	end))
+end
+
+local function doFullReload(item)
+	item = item or getEquippedItem()
+	if not item or isMelee(item) then return false end
+	if isMagFull(item) then return false end
+	local ok, rl = pcall(function() return item:IsReloading() end)
+	if ok and rl then return false end
+	local reserve = itemField(itemField(item, "Data"), "AmmoReserve")
+	if reserve ~= nil and reserve <= 0 then return false end
+	return (pcall(function() item:StartReloading() end))
+end
+
+local function getClosestEnemy()
+	local root = getRoot()
+	if not root then return nil end
+	local myEnv = LocalPlayer:GetAttribute("EnvironmentID")
+	local myTeam = LocalPlayer:GetAttribute("TeamID")
+	local best, bestDist = nil, math.huge
+	local myPos = (Desync._oldCFrame or root.CFrame).Position
+	for _, plr in ipairs(Players:GetPlayers()) do
+		if plr ~= LocalPlayer and plr.Character then
+			local hum = plr.Character:FindFirstChildOfClass("Humanoid")
+			local head = getHead(plr.Character)
+			if hum and hum.Health > 0 and head and not isInvincible(plr.Character) then
+				local env = plr:GetAttribute("EnvironmentID")
+				local team = plr:GetAttribute("TeamID")
+				local envOk = (myEnv == nil) or (env == myEnv)
+				local teamOk = (myTeam == nil) or (team == nil) or (team ~= myTeam)
+				if envOk and teamOk then
+					local d = (head.Position - myPos).Magnitude
+					if d < bestDist then
+						best, bestDist = { Head = head, Character = plr.Character }, d
+					end
+				end
+			end
+		end
+	end
+	return best
+end
+
+-- auto pickup
+RunService.Heartbeat:Connect(function()
+	if not Config.AutoPickup.Enabled then return end
+	if not firetouchinterest then return end
+	local root = getRoot()
+	if not root then return end
+	for _, part in ipairs(workspace:GetChildren()) do
+		if part:IsA("BasePart") then
+			local isDrop = part.Name == "_drop"
+			if not isDrop then
+				local dt = part:GetAttribute("DropType")
+				if dt ~= nil then
+					local t = tostring(dt):lower()
+					if t:find("health") or t:find("heal") then
+						isDrop = Config.AutoPickup.Health
+					elseif t:find("ammo") or t:find("bullet") then
+						isDrop = Config.AutoPickup.Ammo
+					else
+						isDrop = Config.AutoPickup.Health or Config.AutoPickup.Ammo
+					end
+				else
+					isDrop = Config.AutoPickup.Health or Config.AutoPickup.Ammo
+				end
+			end
+			if isDrop then
+				local dist = (part.Position - root.Position).Magnitude
+				if dist < Config.AutoPickup.Range then
+					pcall(firetouchinterest, root, part, 0)
+					pcall(firetouchinterest, root, part, 1)
+				end
+			end
+		end
+	end
+end)
+
+local lastTarget = nil
+local meleeCount = 0
+local meleeTarget = nil
+local switchState = { lastSwitchAt = 0, cooldown = 0.15 }
+
+local function scatterStep(root)
+	local dir = cycleEscape()
+	desyncSetScatter(CFrame.new(root.CFrame.Position + dir))
+	desyncPush(root)
+end
+
+-- UE assisted rage
+local TELEPORT_CFRAME = CFrame.new(9000, 9000, 9000)
+local trackedParts = {}
+local ueEnabled = false
+
+local function setUERage(state)
+	ueEnabled = state
+	shared.RagebotActive = state
+	if not state then trackedParts = {} end
+end
+
+workspace.ChildAdded:Connect(function(o)
+	if not ueEnabled then return end
+	if not o:IsA("BasePart") then return end
+	if o.Name == "CoreProjectile" then
+		trackedParts[o] = true
+	elseif o.Name == "Part" then
+		task.defer(function()
+			if o and o.Parent and o.AssemblyLinearVelocity.Magnitude > 50 then
+				trackedParts[o] = true
+			end
+		end)
+	end
+end)
+workspace.ChildRemoved:Connect(function(o) trackedParts[o] = nil end)
+
+RunService.Heartbeat:Connect(function()
+	if not ueEnabled then return end
+	pcall(function()
+		for _, p in pairs(Players:GetPlayers()) do
+			if p ~= LocalPlayer and p.Character then
+				local h = p.Character:FindFirstChild("HumanoidRootPart")
+				if h then
+					h.CFrame = TELEPORT_CFRAME
+					h.AssemblyLinearVelocity = Vector3.zero
+					h.AssemblyAngularVelocity = Vector3.zero
+				end
+			end
+		end
+		for _, o in pairs(workspace:GetChildren()) do
+			if o.Name == "CoreProjectile" and o:IsA("BasePart") then
+				o.CFrame = TELEPORT_CFRAME
+				o.AssemblyLinearVelocity = Vector3.zero
+			end
+		end
+		for p in pairs(trackedParts) do
+			if p and p.Parent then
+				p.CFrame = TELEPORT_CFRAME
+				p.AssemblyLinearVelocity = Vector3.zero
+			else
+				trackedParts[p] = nil
+			end
+		end
+	end)
+end)
+
+-- underground
+local undergroundState = getgenv().__MinhoUndergroundState or {
+	Active = false, Conn = nil, NoclipConn = nil, GroundY = nil,
+}
+getgenv().__MinhoUndergroundState = undergroundState
+
+local UNDERGROUND_DEPTH = 6
+local UNDERGROUND_MOVE_SPEED = 50
+
+local function enableUndergroundNoclip()
+	if undergroundState.NoclipConn then return end
+	undergroundState.NoclipConn = RunService.Stepped:Connect(function()
+		local char = LocalPlayer.Character
+		if not char then return end
+		for _, part in char:GetDescendants() do
+			if part:IsA("BasePart") then part.CanCollide = false end
+		end
+	end)
+end
+
+local function disableUndergroundNoclip()
+	if undergroundState.NoclipConn then
+		undergroundState.NoclipConn:Disconnect()
+		undergroundState.NoclipConn = nil
+	end
+	local char = LocalPlayer.Character
+	if char then
+		for _, part in char:GetDescendants() do
+			if part:IsA("BasePart") then part.CanCollide = true end
+		end
+	end
+end
+
+local function stopUnderground()
+	undergroundState.Active = false
+	if undergroundState.Conn then
+		undergroundState.Conn:Disconnect()
+		undergroundState.Conn = nil
+	end
+	disableUndergroundNoclip()
+	undergroundState.GroundY = nil
+end
+
+local function startUnderground()
+	if undergroundState.Active then return end
+	undergroundState.Active = true
+	undergroundState.Conn = RunService.Heartbeat:Connect(function()
+		if not undergroundState.Active then return end
+		local char = LocalPlayer.Character
+		local root = char and char:FindFirstChild("HumanoidRootPart")
+		local hum = char and char:FindFirstChildOfClass("Humanoid")
+		if not root or not hum then return end
+
+		if not undergroundState.GroundY then
+			undergroundState.GroundY = root.Position.Y - UNDERGROUND_DEPTH
+		end
+
+		local moveDir = hum.MoveDirection
+		if moveDir.Magnitude > 0.1 then
+			local flat = Vector3.new(moveDir.X, 0, moveDir.Z).Unit
+			root.AssemblyLinearVelocity = Vector3.new(flat.X * UNDERGROUND_MOVE_SPEED, 0, flat.Z * UNDERGROUND_MOVE_SPEED)
+		else
+			root.AssemblyLinearVelocity = Vector3.zero
+		end
+
+		local currentPos = root.Position
+		root.CFrame = CFrame.new(currentPos.X, undergroundState.GroundY, currentPos.Z) * (root.CFrame - root.CFrame.Position)
+		root.AssemblyAngularVelocity = Vector3.zero
+	end)
+	enableUndergroundNoclip()
+end
+
+LocalPlayer.CharacterAdded:Connect(function()
+	undergroundState.GroundY = nil
+	if undergroundState.Active then enableUndergroundNoclip() end
+end)
+
+-- main ragebot loop
+RunService.Heartbeat:Connect(function()
+	if not Config.Enabled then
+		if speedBoostOriginal then removeSpeedBoost() end
+		clearReloadTransport()
+		desyncClear()
+		return
+	end
+
+	if speedBoostOriginal == nil then applySpeedBoost() end
+	pcall(applySpecialCooldowns)
+	if safeToggle("NoRecoilEnabled") then pcall(applyNoRecoil) end
+
+	local now = os.clock()
+	local root = getRoot()
+	local hum = getHum()
+	if not root or not hum or hum.Health <= 0 then desyncClear() return end
+	if not isInMatch() then
+		desyncClear()
+		lastTarget = nil
+		return
+	end
+
+	local evasionOn = (Config.EvasionMode == "Random")
+	local function evade()
+		if evasionOn then scatterStep(root) else desyncClear() end
+	end
+
+	local currentItem = getEquippedItem()
+	if not currentItem then desyncClear() return end
+	local currentIsMelee = isMelee(currentItem)
+
+	local action = weaponAction()
+	if action == nil then
+		clearReloadTransport()
+		evade()
+		return
+	end
+
+	if action.type == "Swap" then
+		clearReloadTransport()
+		evade()
+		if (now - switchState.lastSwitchAt) > switchState.cooldown then
+			equipItem(action.item)
+			switchState.lastSwitchAt = now
+		end
+		return
+	end
+
+	if action.type == "Reload" then
+		local gun = action.item
+		if isMagFull(gun) then
+			clearReloadTransport()
+			evade()
+			return
+		end
+
+		if ReloadTransport.gun == nil then
+			ReloadTransport.gun = gun
+			ReloadTransport.readyAt = nil
+			ReloadTransport.pendingAmmo = nil
+			ReloadTransport.ackDeadline = nil
+			ReloadTransport.lastShotCount = getShotRequestCount(gun)
+		end
+
+		if currentItem ~= ReloadTransport.gun then
+			clearReloadTransport()
+			return
+		end
+
+		evade()
+
+		local ammo = getGunAmmo(gun)
+		local reserve = getGunReserve(gun)
+
+		if isReloading(gun) then
+			ReloadTransport.readyAt = nil
+			ReloadTransport.pendingAmmo = nil
+			ReloadTransport.ackDeadline = nil
+			return
+		end
+
+		if ReloadTransport.pendingAmmo ~= nil then
+			if not (ammo <= 0 and reserve > 0) then
+				local deadlinePassed = ReloadTransport.ackDeadline == nil or now >= ReloadTransport.ackDeadline
+				if deadlinePassed then clearReloadTransport() end
+				return
+			end
+			ReloadTransport.pendingAmmo = nil
+			ReloadTransport.ackDeadline = nil
+		end
+
+		if ammo > 0 or reserve <= 0 then
+			clearReloadTransport()
+			return
+		end
+
+		if ReloadTransport.readyAt == nil then
+			ReloadTransport.readyAt = now + getEstimatedReplicationDelay()
+		end
+
+		if now >= ReloadTransport.readyAt
+			and (ReloadTransport.ackDeadline == nil or now >= ReloadTransport.ackDeadline) then
+			if doFullReload(gun) then
+				ReloadTransport.ackDeadline = os.clock() + getEstimatedRemoteDelay() + getEstimatedReplicationDelay()
+			else
+				clearReloadTransport()
+			end
+		end
+		return
+	end
+
+	if action.type == "Utility" then
+		clearReloadTransport()
+		evade()
+		lastTarget = nil
+		return
+	end
+
+	local enemy = getClosestEnemy()
+	if not enemy then
+		clearReloadTransport()
+		evade()
+		lastTarget = nil
+		meleeTarget = nil
+		return
+	end
+	local targetChar = enemy.Character
+	local head = enemy.Head
+	if not targetChar or not head or isDead(targetChar) then
+		clearReloadTransport()
+		evade()
+		lastTarget = nil
+		meleeTarget = nil
+		return
+	end
+
+	lastTarget = targetChar
+	local firePart = pickRageTargetPart(targetChar) or head
+
+	if currentIsMelee then
+		if targetChar ~= meleeTarget then
+			meleeCount = 0
+			meleeTarget = targetChar
+		end
+		local targetHum = targetChar:FindFirstChildOfClass("Humanoid")
+		local targetAlive = targetHum and targetHum.Health > 0 and not isDead(targetChar)
+		if not targetAlive then
+			clearReloadTransport()
+			evade()
+			meleeCount = 0
+			meleeTarget = nil
+			return
+		end
+		local targetPos = firePart.Position + Vector3.new(0, Config.HitAboveY, 0)
+		desyncSetEnemy(CFrame.new(targetPos))
+		desyncPush(root)
+		doFire(firePart)
+		return
+	end
+
+	local targetPos = firePart.Position + Vector3.new(0, Config.HitAboveY, 0)
+	desyncSetEnemy(CFrame.new(targetPos))
+	desyncPush(root)
+	if doFire(firePart) then
+		local curGun = currentItem
+		if curGun and itemType(curGun) == "Gun" then
+			local after = getExpectedAmmo(curGun)
+			if after ~= nil and after <= 0 and getGunReserve(curGun) > 0 then
+				local nowA = os.clock()
+				ReloadTransport.gun = curGun
+				ReloadTransport.readyAt = nowA + getEstimatedReplicationDelay()
+				ReloadTransport.pendingAmmo = getGunAmmo(curGun) or 0
+				ReloadTransport.ackDeadline = nowA + getEstimatedRemoteDelay() + getEstimatedReplicationDelay()
+			end
+		end
+	end
+end)
+
+-- ===== Rage UI (HvH tab) =====
+local HvhRageBox = HvhTab:AddLeftGroupbox("Ragebot")
+local HvhRBox    = HvhTab:AddRightGroupbox("Rage")
+local HvhSCBox   = HvhTab:AddRightGroupbox("Speed Control")
+
+HvhRageBox:AddCheckbox("RageEnabled", {
+	Text = "Ragebot Enabled", Default = false,
+	Callback = function(v) Config.Enabled = v end,
+})
+HvhRageBox:AddDropdown("EvasionMode", {
+	Text = "Evasion Mode", Values = { "Off", "Lobby", "Random" },
+	Default = "Random", Multi = false,
+	Callback = function(v) Config.EvasionMode = v end,
+})
+HvhRageBox:AddSlider("HitAboveY", {
+	Text = "Hit Above Y", Default = 0.5, Min = -5, Max = 5,
+	Rounding = 2, Suffix = " studs",
+	Callback = function(v) Config.HitAboveY = v end,
+})
+HvhRageBox:AddDropdown("OnEmptyAmmo", {
+	Text = "On Empty Ammo",
+	Values = { "Swap or Reload", "Reload Only", "Swap Only" },
+	Default = "Swap or Reload", Multi = false,
+	Callback = function(v)
+		if v == "Reload Only" then Config.Weapons.OnEmpty = "Reload"
+		elseif v == "Swap Only" then Config.Weapons.OnEmpty = "Swap"
+		else Config.Weapons.OnEmpty = "SwapOrReload" end
+	end,
+})
+HvhRageBox:AddLabel("Weapon Types to Use")
+HvhRageBox:AddCheckbox("Enabled_Primary", {
+	Text = "Use Primary", Default = true,
+	Callback = function(v) Config.Weapons.Enabled.Primary = v end,
+})
+HvhRageBox:AddCheckbox("Enabled_Secondary", {
+	Text = "Use Secondary", Default = true,
+	Callback = function(v) Config.Weapons.Enabled.Secondary = v end,
+})
+HvhRageBox:AddCheckbox("Enabled_Melee", {
+	Text = "Use Melee", Default = true,
+	Callback = function(v) Config.Weapons.Enabled.Melee = v end,
+})
+HvhRageBox:AddCheckbox("Enabled_Utility", {
+	Text = "Use Utility", Default = false,
+	Callback = function(v) Config.Weapons.Enabled.Utility = v end,
+})
+
+HvhRBox:AddCheckbox("UEAssistedRage", {
+	Text = "UE Assisted Rage", Default = false,
+	Callback = function(Value) setUERage(Value) end,
+})
+HvhRBox:AddCheckbox("Underground", {
+	Text = "Underground", Default = false,
+	Callback = function(Value)
+		if Value then startUnderground() else stopUnderground() end
+	end,
+})
+
+HvhSCBox:AddCheckbox("NoRecoilEnabled", {
+	Text = "No Recoil", Default = false,
+	Callback = function(Value)
+		if Value then applyNoRecoil() else revertNoRecoil() end
+	end,
+})
+
+local function cooldownRow(boxId, sliderId, label)
+	HvhSCBox:AddCheckbox(boxId, {
+		Text = label, Default = false,
+		Callback = function() applySpecialCooldowns() end,
+	})
+	local dep = HvhSCBox:AddDependencyBox()
+	dep:AddSlider(sliderId, {
+		Default = 75, Min = 0, Max = 100, Rounding = 0, Compact = true,
+		Callback = function() applySpecialCooldowns() end,
+	})
+	dep:SetupDependencies({ { Toggles[boxId], true } })
+end
+
+cooldownRow("FireCooldownEnabled", "FireCooldownSlider", "Fire Cooldown (Guns)")
+cooldownRow("MeleeCooldownEnabled", "MeleeCooldownSlider", "Melee Cooldown (Melee)")
+cooldownRow("ScytheDashToggle", "ScytheDashSlider", "Scythe Dash")
+cooldownRow("AxeSpinToggle", "AxeSpinSlider", "Battle Axe Dash")
+cooldownRow("KatanaDeflectToggle", "KatanaDeflectSlider", "Katana Deflect")
+cooldownRow("KnifeHeavyToggle", "KnifeHeavySlider", "Knife Heavy Attack")
+
+Library:OnUnload(function()
+	pcall(function()
+		setUERage(false)
+		stopUnderground()
+		removeSpeedBoost()
+		revertNoRecoil()
+		desyncClear()
+	end)
+end)
+
+end -- Ragebot block
+
+-- ===== Halloween: auto-shoot (weapon logic from Minho Hub) =====
+do
+local repS = game:GetService("ReplicatedStorage")
+local plrs = game:GetService("Players")
+local runS = game:GetService("RunService")
+local uis = game:GetService("UserInputService")
+local ws = workspace
+local lplr = plrs.LocalPlayer
+local util = require(repS.Modules.Utility)
+local enum = require(repS.Modules.EnumLibrary)
+local FighterController = require(lplr.PlayerScripts.Controllers.FighterController)
+
+local HALLOWEEN = {
+	AutoShoot = true,
+	FireRate = 0.05,
+	WeaponSlot = "Primary",
+	MaxDistance = 500,
+	Debug = false,
+}
+local halloweenRunning = true
+
+local function itemField(obj, key)
+	if obj == nil then return nil end
+	local ok, v = pcall(function() return obj[key] end)
+	return ok and v or nil
+end
+
+local function getItems()
+	local fighter = FighterController.LocalFighter
+	local items = itemField(fighter, "Items")
+	if type(items) == "table" then return items end
+	return nil
+end
+
+local function getEquippedItem()
+	local fighter = FighterController.LocalFighter
+	local equipped = itemField(fighter, "EquippedItem")
+	if equipped ~= nil then return equipped end
+	for _, entry in pairs(getItems() or {}) do
+		if itemField(entry, "IsEquipped") == true then return entry end
+	end
+	return nil
+end
+
+local function itemIndex(item)
+	return itemField(itemField(item, "Data"), "ItemIndex")
+end
+
+local function itemClass(item)
+	if item == nil then return nil end
+	local class = itemField(itemField(item, "Info"), "Class")
+	if class ~= nil then return class end
+	local index = itemIndex(item)
+	return index and ({ "Primary", "Secondary", "Melee", "Utility" })[index] or nil
+end
+
+local function equipItem(item)
+	if item == nil then return false end
+	if itemField(item, "IsEquipped") == true then return true end
+	local fighter = itemField(item, "ClientFighter") or FighterController.LocalFighter
+	local index = itemIndex(item)
+	if fighter == nil or index == nil then
+		return (pcall(function() item:Equip() end))
+	end
+	if pcall(function() fighter:EquipItem(index) end) then return true end
+	return (pcall(function() item:Equip() end))
+end
+
+local function findInSlot(class)
+	for _, entry in pairs(getItems() or {}) do
+		if itemClass(entry) == class then return entry end
+	end
+	return nil
+end
+
+local function firstItem()
+	for _, entry in pairs(getItems() or {}) do
+		return entry
+	end
+	return nil
+end
+
+local UNDEAD_PATTERNS = { "zombie", "gargoyle", "chombie", "reanimat" }
+local function isUndeadName(name)
+	local lower = name:lower()
+	for _, p in ipairs(UNDEAD_PATTERNS) do
+		if lower:find(p, 1, true) then return true end
+	end
+	return false
+end
+
+-- wall check: camera -> target head, only walls block (own char + target ignored)
+local wallParams = RaycastParams.new()
+wallParams.FilterType = Enum.RaycastFilterType.Exclude
+
+local function hasLineOfSight(targetModel, headPos)
+	local char = lplr.Character
+	if not char then return false end
+	local camera = ws.CurrentCamera
+	local origin = camera and camera.CFrame.Position
+	if not origin then return false end
+	wallParams.FilterDescendantsInstances = { char, targetModel }
+	local hit = ws:Raycast(origin, headPos - origin, wallParams)
+	return hit == nil
+end
+
+local lastFire = 0
+local lastSwitch = 0
+local cachedTarget = nil
+local lastCacheTime = 0
+local CACHE_INTERVAL = 0.15
+
+local function getClosestTarget()
+	local now = tick()
+	local char = lplr.Character
+	local myRoot = char and char:FindFirstChild("HumanoidRootPart")
+	if not myRoot then return nil, nil, nil end
+
+	if now - lastCacheTime < CACHE_INTERVAL and cachedTarget then
+		local hum = cachedTarget:FindFirstChildWhichIsA("Humanoid")
+		local root = cachedTarget:FindFirstChild("HumanoidRootPart", true)
+		local head = cachedTarget:FindFirstChild("Head", true)
+		if hum and hum.Health > 0 and root and head and hasLineOfSight(cachedTarget, head.Position) then
+			return cachedTarget, root, head
+		end
+		cachedTarget = nil
+	end
+
+	lastCacheTime = now
+
+	local closestModel, closestRoot, closestHead = nil, nil, nil
+	local closestDist = HALLOWEEN.MaxDistance
+	local seen = {}
+
+	-- recursive: enemies are often nested (Appearance.Head, tower sub-folders)
+	for _, inst in ipairs(ws:GetDescendants()) do
+		if inst:IsA("Humanoid") and inst.Health > 0 then
+			local obj = inst.Parent
+			while obj and not obj:IsA("Model") do obj = obj.Parent end
+			if obj and obj ~= char and not seen[obj] and not plrs:GetPlayerFromCharacter(obj)
+				and isUndeadName(obj.Name) then
+				seen[obj] = true
+				local pRoot = obj:FindFirstChild("HumanoidRootPart", true)
+				local pHead = obj:FindFirstChild("Head", true)
+				if pRoot and pHead then
+					local dist = (myRoot.Position - pRoot.Position).Magnitude
+					if dist < closestDist and hasLineOfSight(obj, pHead.Position) then
+						closestDist = dist
+						closestModel = obj
+						closestRoot = pRoot
+						closestHead = pHead
+					end
+				end
+			end
+		end
+	end
+
+	if HALLOWEEN.Debug and closestModel ~= cachedTarget then
+		warn("[Halloween] target: " .. (closestModel and closestModel:GetFullName() or "none"))
+	end
+
+	cachedTarget = closestModel
+	return closestModel, closestRoot, closestHead
+end
+
+local halloweenConn = runS.Heartbeat:Connect(function()
+	if not halloweenRunning then return end
+
+	local now = tick()
+
+	-- weapon follows the dropdown; if preferred slot is empty, keep whatever is in hand
+	local equipped = getEquippedItem()
+	if not equipped or itemClass(equipped) ~= HALLOWEEN.WeaponSlot then
+		if now - lastSwitch >= 0.15 then
+			local item = findInSlot(HALLOWEEN.WeaponSlot) or (not equipped and firstItem()) or nil
+			if item then
+				lastSwitch = now
+				equipItem(item)
+			end
+		end
+	end
+	if not equipped then return end
+
+	-- auto ON: fire at enemies on its own. auto OFF: fire only while LMB is held
+	if not HALLOWEEN.AutoShoot and not uis:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
+		return
+	end
+
+	local targetModel, targetRoot, targetHead = getClosestTarget()
+	if not targetModel or not targetHead or not targetRoot then return end
+
+	local char = lplr.Character
+	if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+
+	if now - lastFire < HALLOWEEN.FireRate then return end
+	lastFire = now
+
+	-- head shot: aim at head with tiny jitter
+	local originPos = targetHead.Position + Vector3.new(0, 1, 0)
+	local targetPos = targetHead.Position
+	local aimCF = CFrame.lookAt(originPos, targetPos)
+	local targetCF = targetHead.CFrame
+
+	local randomOffset = Vector3.new(
+		(math.random() - 0.5) * 0.02,
+		(math.random() - 0.5) * 0.02,
+		(math.random() - 0.5) * 0.02
+	)
+	local aimedPos = targetPos + randomOffset
+	local objSpaceHeadOffset = targetHead.CFrame:ToObjectSpace(CFrame.new(aimedPos))
+
+	local cameradata = {}
+	cameradata[utf8.char(1)] = {
+		[utf8.char(0)] = util:EncodeCFrame(aimCF),
+		[utf8.char(1)] = util:EncodeCFrame(targetCF),
+		[utf8.char(2)] = targetHead,
+		[utf8.char(3)] = util:EncodeCFrame(objSpaceHeadOffset),
+	}
+
+	pcall(function()
+		repS.Remotes.Replication.Fighter.UseItem:FireServer(
+			equipped:Get("ObjectID"),
+			enum:ToEnum("StartShooting"),
+			cameradata,
+			nil
+		)
+	end)
+end)
+
+-- ===== Halloween tab UI =====
+local HalloweenBox = HalloweenTab:AddLeftGroupbox("Auto Shoot")
+
+HalloweenBox:AddToggle("HalloweenDebug", {
+	Text = "debug target print", Default = false,
+	Callback = function(value) HALLOWEEN.Debug = value == true end,
+})
+
+HalloweenBox:AddToggle("HalloweenAutoShoot", {
+	Text = "auto-shoot (off = hold LMB to shoot)", Default = true,
+	Callback = function(value) HALLOWEEN.AutoShoot = value == true end,
+})
+
+HalloweenBox:AddDropdown("HalloweenWeaponSlot", {
+	Text = "preferred weapon", Values = { "Primary", "Secondary", "Melee" },
+	Default = "Primary", Multi = false,
+	Callback = function(value) HALLOWEEN.WeaponSlot = tostring(value or "Primary") end,
+})
+
+HalloweenBox:AddSlider("HalloweenFireRate", {
+	Text = "fire rate (seconds)", Default = 0.05, Min = 0.01, Max = 0.5, Rounding = 2,
+	Callback = function(value) HALLOWEEN.FireRate = tonumber(value) or HALLOWEEN.FireRate end,
+})
+
+HalloweenBox:AddSlider("HalloweenMaxDist", {
+	Text = "max distance", Default = 500, Min = 50, Max = 2000, Rounding = 0,
+	Callback = function(value) HALLOWEEN.MaxDistance = tonumber(value) or HALLOWEEN.MaxDistance end,
+})
+
+Library:OnUnload(function()
+	halloweenRunning = false
+	if halloweenConn then
+		halloweenConn:Disconnect()
+		halloweenConn = nil
+	end
+end)
+
+end -- Halloween block
